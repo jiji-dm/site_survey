@@ -7,9 +7,10 @@ interface Props {
   field: Field
   value: FieldValue
   onChange: (v: FieldValue) => void
+  readOnly?: boolean
 }
 
-export default function FieldRenderer({ field, value, onChange }: Props) {
+export default function FieldRenderer({ field, value, onChange, readOnly }: Props) {
   return (
     <div className="space-y-1.5">
       {/* check 以外はラベルを上に */}
@@ -23,12 +24,17 @@ export default function FieldRenderer({ field, value, onChange }: Props) {
         </div>
       )}
 
-      {renderControl(field, value, onChange)}
+      {renderControl(field, value, onChange, !!readOnly)}
     </div>
   )
 }
 
-function renderControl(field: Field, value: FieldValue, onChange: (v: FieldValue) => void) {
+function renderControl(
+  field: Field,
+  value: FieldValue,
+  onChange: (v: FieldValue) => void,
+  readOnly: boolean,
+) {
   switch (field.type) {
     case 'single':
       return (
@@ -36,6 +42,7 @@ function renderControl(field: Field, value: FieldValue, onChange: (v: FieldValue
           options={field.options ?? []}
           value={typeof value === 'string' ? value : null}
           onChange={v => onChange(v)}
+          disabled={readOnly}
         />
       )
     case 'multi':
@@ -45,6 +52,7 @@ function renderControl(field: Field, value: FieldValue, onChange: (v: FieldValue
           options={field.options ?? []}
           value={Array.isArray(value) ? value : []}
           onChange={v => onChange(v)}
+          disabled={readOnly}
         />
       )
     case 'number':
@@ -60,6 +68,7 @@ function renderControl(field: Field, value: FieldValue, onChange: (v: FieldValue
               onChange(v === '' ? null : Number(v))
             }}
             placeholder="0"
+            disabled={readOnly}
           />
           {field.suffix && (
             <span className="text-sm text-ink-muted whitespace-nowrap">{field.suffix}</span>
@@ -74,6 +83,7 @@ function renderControl(field: Field, value: FieldValue, onChange: (v: FieldValue
           value={typeof value === 'string' ? value : ''}
           onChange={e => onChange(e.target.value)}
           placeholder={field.hint ?? ''}
+          disabled={readOnly}
         />
       )
     case 'memo':
@@ -84,6 +94,7 @@ function renderControl(field: Field, value: FieldValue, onChange: (v: FieldValue
           value={typeof value === 'string' ? value : ''}
           onChange={e => onChange(e.target.value)}
           placeholder={field.hint ?? ''}
+          disabled={readOnly}
         />
       )
     case 'check': {
@@ -92,11 +103,13 @@ function renderControl(field: Field, value: FieldValue, onChange: (v: FieldValue
         <button
           type="button"
           onClick={() => onChange(!checked)}
+          disabled={readOnly}
           className={clsx(
             'w-full flex items-center gap-3 p-3 rounded-xl border transition text-left',
             checked
               ? 'bg-brand-50 border-brand-300 text-ink'
               : 'bg-surface border-surface-border hover:border-brand-300',
+            readOnly && 'opacity-70 cursor-not-allowed',
           )}
         >
           <span

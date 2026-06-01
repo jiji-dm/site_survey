@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, CalendarDays, User, ChevronRight, Trash2, Cloud, HardDrive } from 'lucide-react'
+import { Plus, CalendarDays, User, ChevronRight, Trash2, Cloud, HardDrive, Users, Eye } from 'lucide-react'
 import { newProject, saveProject, deleteProject } from '../lib/store'
 import { useProjects } from '../hooks/useProjects'
 import { useAuth } from '../hooks/useAuth'
@@ -44,6 +44,10 @@ export default function ProjectList() {
         <div className="grid gap-3 sm:grid-cols-2">
           {projects.map(p => {
             const prog = calcTotalProgress(p)
+            const myEmail = auth.status === 'signed-in' ? auth.user.email : null
+            const isSharedToMe = !!myEmail && p.ownerEmail !== myEmail
+            const myShare = myEmail ? p.sharedWith?.find(m => m.email === myEmail) : undefined
+            const isViewer = myShare?.role === 'viewer'
             return (
               <Link
                 key={p.id}
@@ -54,6 +58,22 @@ export default function ProjectList() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <WorkTypeBadge workType={p.workType} />
+                      {isSharedToMe && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-brand-50 border border-brand-200 text-brand-700">
+                          <Users size={11} />
+                          共有された
+                        </span>
+                      )}
+                      {isViewer && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface border border-surface-border text-ink-muted">
+                          <Eye size={11} /> 閲覧のみ
+                        </span>
+                      )}
+                      {!isSharedToMe && (p.sharedWith?.length ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
+                          <Users size={11} /> {p.sharedWith?.length}人に共有
+                        </span>
+                      )}
                     </div>
                     <h2 className="font-semibold text-ink truncate text-[15px]">
                       {p.siteName || <span className="text-ink-subtle">（無題の現場）</span>}
@@ -91,20 +111,22 @@ export default function ProjectList() {
                   </div>
                 </div>
 
-                {/* 削除ボタン */}
-                <div className="mt-3 flex justify-end">
-                  <button
-                    onClick={async e => {
-                      e.preventDefault()
-                      if (confirm(`「${p.siteName || '無題'}」を削除しますか？`)) {
-                        await deleteProject(p.id)
-                      }
-                    }}
-                    className="text-xs text-ink-subtle hover:text-red-600 inline-flex items-center gap-1"
-                  >
-                    <Trash2 size={12} /> 削除
-                  </button>
-                </div>
+                {/* 削除ボタン (オーナーのみ) */}
+                {!isSharedToMe && (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      onClick={async e => {
+                        e.preventDefault()
+                        if (confirm(`「${p.siteName || '無題'}」を削除しますか？`)) {
+                          await deleteProject(p.id)
+                        }
+                      }}
+                      className="text-xs text-ink-subtle hover:text-red-600 inline-flex items-center gap-1"
+                    >
+                      <Trash2 size={12} /> 削除
+                    </button>
+                  </div>
+                )}
               </Link>
             )
           })}

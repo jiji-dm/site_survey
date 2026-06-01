@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Save, Check, Share2, Download, Settings2 } from 'lucide-react'
+import { ChevronLeft, Save, Check, Share2, Download, Settings2, Eye, Users } from 'lucide-react'
 import clsx from 'clsx'
 import { saveProject } from '../lib/store'
 import { useProject } from '../hooks/useProjects'
+import { useAuth } from '../hooks/useAuth'
 import { calcTotalProgress, calcSectionProgress } from '../lib/progress'
 import { SECTIONS, visibleGroups, visibleFields } from '../data/schema'
 import type { FieldValue, Project, Section, Values, WorkType } from '../types/checklist'
@@ -11,6 +12,7 @@ import SectionNav from '../components/SectionNav'
 import FieldRenderer from '../components/FieldRenderer'
 import WorkTypeBadge from '../components/WorkTypeBadge'
 import WorkTypePicker from '../components/WorkTypePicker'
+import ShareDialog from '../components/ShareDialog'
 import { useDebouncedEffect } from '../hooks/useDebounce'
 
 type Phase = 'setup' | 'removal'
@@ -18,6 +20,8 @@ type Phase = 'setup' | 'removal'
 export default function ProjectEdit() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const auth = useAuth()
+  const myEmail = auth.status === 'signed-in' ? auth.user.email : null
 
   // ライブ購読で初期値を読み込み
   const load = useProject(id)
@@ -28,6 +32,7 @@ export default function ProjectEdit() {
   const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id)
   const [activePhase, setActivePhase] = useState<Phase>('setup')
   const [typePickerOpen, setTypePickerOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   useEffect(() => {
     if (load.state === 'loaded' && load.project && !draft) {
@@ -56,6 +61,14 @@ export default function ProjectEdit() {
   const isDualPhase = !!active.dualPhase && isTemporary
   const sameForBoth = draft.phaseSameAs?.[active.id] === true
 
+  // 権限判定
+  const isOwner = !!myEmail && draft.ownerEmail === myEmail
+  const myShare = myEmail ? draft.sharedWith?.find(m => m.email === myEmail) : undefined
+  // owner = 編集可、shared editor = 編集可、shared viewer = 閲覧のみ
+  // ローカルモード (myEmail がない場合) は編集可
+  const canEdit = !myEmail || isOwner || myShare?.role === 'editor'
+  const isReadOnly = !canEdit
+
   // dualPhase で「同一条件」ONなら setup を有効フェーズに固定
   const effectivePhase: Phase = sameForBoth ? 'setup' : activePhase
 
@@ -66,6 +79,7 @@ export default function ProjectEdit() {
   }
 
   function patchValue(fieldId: string, v: FieldValue) {
+    if (isReadOnly) return
     setDraft(prev => {
       if (!prev) return prev
       if (isDualPhase) {
@@ -82,10 +96,12 @@ export default function ProjectEdit() {
   }
 
   function patchMeta<K extends keyof Project>(key: K, v: Project[K]) {
+    if (isReadOnly) return
     setDraft(prev => (prev ? { ...prev, [key]: v, updatedAt: Date.now() } : prev))
   }
 
   function toggleSameForBoth() {
+    if (isReadOnly) return
     setDraft(prev => {
       if (!prev) return prev
       const cur = prev.phaseSameAs?.[active.id] === true
@@ -101,6 +117,7 @@ export default function ProjectEdit() {
   }
 
   function changeWorkType(newType: WorkType) {
+    if (isReadOnly) return
     setDraft(prev => {
       if (!prev) return prev
       const next = { ...prev, workType: newType, updatedAt: Date.now() }
@@ -121,14 +138,26 @@ export default function ProjectEdit() {
           <button onClick={() => navigate('/')} className="btn-ghost -ml-2">
             <ChevronLeft size={16} /> 現場一覧
           </button>
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
             <WorkTypeBadge workType={draft.workType} />
-            <button
-              onClick={() => setTypePickerOpen(true)}
-              className="text-xs text-ink-subtle hover:text-brand-700 inline-flex items-center gap-1"
-            >
-              <Settings2 size={11} /> 変更
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => setTypePickerOpen(true)}
+                className="text-xs text-ink-subtle hover:text-brand-700 inline-flex items-center gap-1"
+              >
+                <Settings2 size={11} /> 変更
+              </button>
+            )}
+            {isReadOnly && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface border border-surface-border text-ink-muted">
+                <Eye size={11} /> 閲覧モード
+              </span>
+            )}
+            {(draft.sharedWith?.length ?? 0) > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-brand-50 border border-brand-200 text-brand-700">
+                <Users size={11} /> {draft.sharedWith?.length}人
+              </span>
+            )}
           </div>
           <h1 className="font-bold text-lg text-ink mt-2 truncate">
             {draft.siteName || '（無題の現場）'}
@@ -137,7 +166,7 @@ export default function ProjectEdit() {
         </div>
 
         <div className="p-4 space-y-3 border-b border-surface-border">
-          <MetaFields draft={draft} patchMeta={patchMeta} />
+          <MetaFields draft={draft} patchMeta={patchMeta} readOnly={isReadOnly} />
         </div>
 
         <div className="p-4 border-b border-surface-border">
@@ -154,7 +183,7 @@ export default function ProjectEdit() {
         </div>
 
         <div className="p-3 border-t border-surface-border space-y-2">
-          <button className="btn-outline w-full" onClick={() => alert('共有機能は v2 で実装予定')}>
+          <button className="btn-outline w-full" onClick={() => setShareOpen(true)}>
             <Share2 size={14} /> 共有
           </button>
           <button className="btn-outline w-full" onClick={() => alert('PDF出力は v2 で実装予定')}>
@@ -177,16 +206,30 @@ export default function ProjectEdit() {
                 value={draft.siteName}
                 onChange={e => patchMeta('siteName', e.target.value)}
                 placeholder="現場名を入力"
+                disabled={isReadOnly}
                 className="w-full bg-transparent font-semibold text-ink text-[15px]
-                           focus:outline-none placeholder:text-ink-subtle"
+                           focus:outline-none placeholder:text-ink-subtle disabled:opacity-80"
               />
+              {isReadOnly && (
+                <div className="text-[10px] text-ink-subtle leading-none mt-0.5">
+                  <Eye size={9} className="inline mr-0.5" />閲覧モード
+                </div>
+              )}
             </div>
             <button
-              onClick={() => setTypePickerOpen(true)}
+              onClick={() => isReadOnly ? null : setTypePickerOpen(true)}
               className="inline-flex items-center"
               aria-label="工事種別を変更"
+              disabled={isReadOnly}
             >
               <WorkTypeBadge workType={draft.workType} />
+            </button>
+            <button
+              onClick={() => setShareOpen(true)}
+              className="p-1.5 text-ink-subtle hover:text-brand-700 rounded-md"
+              aria-label="共有"
+            >
+              <Share2 size={16} />
             </button>
             <SaveStatus savedAt={savedAt} compact />
           </div>
@@ -200,7 +243,7 @@ export default function ProjectEdit() {
               現場情報（日付・担当者など）
             </summary>
             <div className="pt-3 space-y-3">
-              <MetaFields draft={draft} patchMeta={patchMeta} />
+              <MetaFields draft={draft} patchMeta={patchMeta} readOnly={isReadOnly} />
             </div>
           </details>
         </div>
@@ -238,6 +281,7 @@ export default function ProjectEdit() {
                       field={f}
                       value={getValue(f.id)}
                       onChange={v => patchValue(f.id, v)}
+                      readOnly={isReadOnly}
                     />
                   ))}
                 </div>
@@ -267,6 +311,13 @@ export default function ProjectEdit() {
         onClose={() => setTypePickerOpen(false)}
         onPick={changeWorkType}
       />
+
+      <ShareDialog
+        open={shareOpen}
+        project={draft}
+        currentUserEmail={myEmail}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   )
 }
@@ -277,9 +328,11 @@ export default function ProjectEdit() {
 function MetaFields({
   draft,
   patchMeta,
+  readOnly,
 }: {
   draft: Project
   patchMeta: <K extends keyof Project>(k: K, v: Project[K]) => void
+  readOnly?: boolean
 }) {
   return (
     <>
@@ -290,6 +343,7 @@ function MetaFields({
           value={draft.siteName}
           onChange={e => patchMeta('siteName', e.target.value)}
           placeholder="〇〇ビル"
+          disabled={readOnly}
         />
       </div>
       <div>
@@ -299,6 +353,7 @@ function MetaFields({
           className="input mt-1"
           value={draft.date}
           onChange={e => patchMeta('date', e.target.value)}
+          disabled={readOnly}
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -308,6 +363,7 @@ function MetaFields({
             className="input mt-1"
             value={draft.inCharge}
             onChange={e => patchMeta('inCharge', e.target.value)}
+            disabled={readOnly}
           />
         </div>
         <div>
@@ -316,6 +372,7 @@ function MetaFields({
             className="input mt-1"
             value={draft.confirmer}
             onChange={e => patchMeta('confirmer', e.target.value)}
+            disabled={readOnly}
           />
         </div>
       </div>
