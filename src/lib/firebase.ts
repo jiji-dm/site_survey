@@ -36,11 +36,18 @@ export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseCon
 let app: FirebaseApp | null = null
 let db: Firestore | null = null
 
+/**
+ * 永続化を一度だけ設定する Promise。
+ * これを await することで「localStorage に確実に保存される状態」を保証する。
+ */
+let persistenceReady: Promise<void> = Promise.resolve()
+
 if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig)
   db = getFirestore(app)
   // 永続化方式をブラウザのlocalStorageに（リダイレクト後も維持できるように）
-  setPersistence(getAuth(app), browserLocalPersistence).catch(() => {/* ignore */})
+  persistenceReady = setPersistence(getAuth(app), browserLocalPersistence)
+    .catch(e => { console.warn('Firebase persistence setup failed', e) })
 }
 
 export { app, db }
@@ -69,6 +76,8 @@ export function isAllowedEmail(email: string | null | undefined): boolean {
  */
 export async function signInWithGoogle(): Promise<void> {
   if (!app) throw new Error('Firebase が設定されていません')
+  // 永続化設定が完了してから signInWithRedirect を呼ぶ
+  await persistenceReady
   const auth = getAuth(app)
   const provider = new GoogleAuthProvider()
   // 許可ドメインのアカウント選択を促す（Workspace向けヒント）
@@ -88,6 +97,8 @@ export async function signInWithGoogle(): Promise<void> {
  */
 export async function handleAuthRedirect(): Promise<User | null> {
   if (!app) return null
+  // 永続化設定が完了してから getRedirectResult を呼ぶ
+  await persistenceReady
   const auth = getAuth(app)
   try {
     const result = await getRedirectResult(auth)
