@@ -1,0 +1,482 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ChevronLeft, Save, Check, Share2, Download, Settings2 } from 'lucide-react'
+import clsx from 'clsx'
+import { saveProject } from '../lib/store'
+import { useProject } from '../hooks/useProjects'
+import { calcTotalProgress, calcSectionProgress } from '../lib/progress'
+import { SECTIONS, visibleGroups, visibleFields } from '../data/schema'
+import type { FieldValue, Project, Section, Values, WorkType } from '../types/checklist'
+import SectionNav from '../components/SectionNav'
+import FieldRenderer from '../components/FieldRenderer'
+import WorkTypeBadge from '../components/WorkTypeBadge'
+import WorkTypePicker from '../components/WorkTypePicker'
+import { useDebouncedEffect } from '../hooks/useDebounce'
+
+type Phase = 'setup' | 'removal'
+
+export default function ProjectEdit() {
+  const { id = '' } = useParams()
+  const navigate = useNavigate()
+
+  // ライブ購読で初期値を読み込み
+  const load = useProject(id)
+
+  // ローカル編集中の状態（オートセーブの遅延中はこちらが先行）
+  const [draft, setDraft] = useState<Project | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id)
+  const [activePhase, setActivePhase] = useState<Phase>('setup')
+  const [typePickerOpen, setTypePickerOpen] = useState(false)
+
+  useEffect(() => {
+    if (load.state === 'loaded' && load.project && !draft) {
+      setDraft(load.project)
+    }
+  }, [load, draft])
+
+  // オートセーブ
+  useDebouncedEffect(draft, 500, () => {
+    if (!draft) return
+    saveProject(draft).then(() => setSavedAt(Date.now()))
+  })
+
+  const prog = useMemo(() => (draft ? calcTotalProgress(draft) : null), [draft])
+
+  if (!draft) {
+    return (
+      <div className="grid place-items-center min-h-[60vh] text-ink-subtle">
+        読み込み中...
+      </div>
+    )
+  }
+
+  const active: Section = SECTIONS.find(s => s.id === activeSection) ?? SECTIONS[0]
+  const isTemporary = draft.workType === 'temporary'
+  const isDualPhase = !!active.dualPhase && isTemporary
+  const sameForBoth = draft.phaseSameAs?.[active.id] === true
+
+  // dualPhase で「同一条件」ONなら setup を有効フェーズに固定
+  const effectivePhase: Phase = sameForBoth ? 'setup' : activePhase
+
+  // 値の取得・更新（dualPhaseセクション or 通常で分岐）
+  function getValue(fieldId: string): FieldValue {
+    if (isDualPhase) return draft!.phaseValues?.[effectivePhase]?.[fieldId]
+    return draft!.values[fieldId]
+  }
+
+  function patchValue(fieldId: string, v: FieldValue) {
+    setDraft(prev => {
+      if (!prev) return prev
+      if (isDualPhase) {
+        const pv = prev.phaseValues ?? { setup: {}, removal: {} }
+        const next = {
+          ...pv,
+          [effectivePhase]: { ...pv[effectivePhase], [fieldId]: v },
+        }
+        return { ...prev, phaseValues: next, updatedAt: Date.now() }
+      }
+      const nextValues: Values = { ...prev.values, [fieldId]: v }
+      return { ...prev, values: nextValues, updatedAt: Date.now() }
+    })
+  }
+
+  function patchMeta<K extends keyof Project>(key: K, v: Project[K]) {
+    setDraft(prev => (prev ? { ...prev, [key]: v, updatedAt: Date.now() } : prev))
+  }
+
+  function toggleSameForBoth() {
+    setDraft(prev => {
+      if (!prev) return prev
+      const cur = prev.phaseSameAs?.[active.id] === true
+      const nextSame = !cur
+      const phaseSameAs = { ...(prev.phaseSameAs ?? {}), [active.id]: nextSame }
+      // 同一条件ON時、撤去フェーズに setup の値をコピーしておく（後でPDF出力等に使える）
+      let phaseValues = prev.phaseValues ?? { setup: {}, removal: {} }
+      if (nextSame) {
+        phaseValues = { ...phaseValues, removal: { ...phaseValues.setup } }
+      }
+      return { ...prev, phaseSameAs, phaseValues, updatedAt: Date.now() }
+    })
+  }
+
+  function changeWorkType(newType: WorkType) {
+    setDraft(prev => {
+      if (!prev) return prev
+      const next = { ...prev, workType: newType, updatedAt: Date.now() }
+      // 仮設に切替時はphaseValuesを用意
+      if (newType === 'temporary' && !next.phaseValues) {
+        next.phaseValues = { setup: {}, removal: {} }
+      }
+      return next
+    })
+    setTypePickerOpen(false)
+  }
+
+  return (
+    <div className="min-h-full flex flex-col lg:flex-row">
+      {/* =================== サイドバー (lg以上) =================== */}
+      <aside className="hidden lg:flex flex-col w-[300px] xl:w-[340px] border-r border-surface-border bg-surface shrink-0">
+        <div className="p-4 border-b border-surface-border">
+          <button onClick={() => navigate('/')} className="btn-ghost -ml-2">
+            <ChevronLeft size={16} /> 現場一覧
+          </button>
+          <div className="flex items-center gap-2 mt-3">
+            <WorkTypeBadge workType={draft.workType} />
+            <button
+              onClick={() => setTypePickerOpen(true)}
+              className="text-xs text-ink-subtle hover:text-brand-700 inline-flex items-center gap-1"
+            >
+              <Settings2 size={11} /> 変更
+            </button>
+          </div>
+          <h1 className="font-bold text-lg text-ink mt-2 truncate">
+            {draft.siteName || '（無題の現場）'}
+          </h1>
+          <SaveStatus savedAt={savedAt} />
+        </div>
+
+        <div className="p-4 space-y-3 border-b border-surface-border">
+          <MetaFields draft={draft} patchMeta={patchMeta} />
+        </div>
+
+        <div className="p-4 border-b border-surface-border">
+          <ProgressBar prog={prog} />
+        </div>
+
+        <div className="p-3 flex-1 overflow-y-auto">
+          <SectionNav
+            variant="desktop"
+            project={draft}
+            activeId={activeSection}
+            onChange={setActiveSection}
+          />
+        </div>
+
+        <div className="p-3 border-t border-surface-border space-y-2">
+          <button className="btn-outline w-full" onClick={() => alert('共有機能は v2 で実装予定')}>
+            <Share2 size={14} /> 共有
+          </button>
+          <button className="btn-outline w-full" onClick={() => alert('PDF出力は v2 で実装予定')}>
+            <Download size={14} /> PDF出力
+          </button>
+        </div>
+      </aside>
+
+      {/* =================== メイン =================== */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* スマホヘッダー */}
+        <header className="lg:hidden sticky top-0 z-20 bg-surface/90 backdrop-blur border-b border-surface-border">
+          <div className="px-3 h-12 flex items-center gap-2">
+            <button onClick={() => navigate('/')} className="btn-ghost -ml-1 px-2">
+              <ChevronLeft size={18} />
+            </button>
+            <div className="flex-1 min-w-0">
+              <input
+                type="text"
+                value={draft.siteName}
+                onChange={e => patchMeta('siteName', e.target.value)}
+                placeholder="現場名を入力"
+                className="w-full bg-transparent font-semibold text-ink text-[15px]
+                           focus:outline-none placeholder:text-ink-subtle"
+              />
+            </div>
+            <button
+              onClick={() => setTypePickerOpen(true)}
+              className="inline-flex items-center"
+              aria-label="工事種別を変更"
+            >
+              <WorkTypeBadge workType={draft.workType} />
+            </button>
+            <SaveStatus savedAt={savedAt} compact />
+          </div>
+          {prog && <ThinProgress prog={prog} />}
+        </header>
+
+        {/* メタ情報 (スマホ) - 折りたたみ式 */}
+        <div className="lg:hidden p-3">
+          <details className="card p-3 [&_summary]:cursor-pointer">
+            <summary className="font-semibold text-sm text-ink select-none">
+              現場情報（日付・担当者など）
+            </summary>
+            <div className="pt-3 space-y-3">
+              <MetaFields draft={draft} patchMeta={patchMeta} />
+            </div>
+          </details>
+        </div>
+
+        {/* セクション本体 */}
+        <div className="flex-1 px-3 sm:px-6 lg:px-10 py-4 lg:py-8 pb-32 lg:pb-12 max-w-3xl mx-auto w-full">
+          <div className="flex items-baseline justify-between mb-4 gap-3">
+            <h2 className="text-xl sm:text-2xl font-bold text-ink">{active.title}</h2>
+            <SectionStatBadge sectionId={active.id} project={draft} />
+          </div>
+
+          {/* 仮設フェーズ切替 + 同一条件スイッチ */}
+          {isDualPhase && (
+            <PhaseSwitcher
+              activePhase={effectivePhase}
+              onChange={setActivePhase}
+              sameForBoth={sameForBoth}
+              onToggleSame={toggleSameForBoth}
+            />
+          )}
+
+          <div className="space-y-4">
+            {visibleGroups(active, draft.workType).map(g => (
+              <section key={g.id} className="card p-4 sm:p-5">
+                {g.title && (
+                  <h3 className="font-semibold text-[15px] text-ink mb-1.5">{g.title}</h3>
+                )}
+                {g.description && (
+                  <p className="text-xs text-ink-muted mb-3">{g.description}</p>
+                )}
+                <div className="space-y-4 mt-3">
+                  {visibleFields(g, draft.workType).map(f => (
+                    <FieldRenderer
+                      key={f.id}
+                      field={f}
+                      value={getValue(f.id)}
+                      onChange={v => patchValue(f.id, v)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+
+          {/* セクション間ナビ (前/次) */}
+          <SectionPager activeId={activeSection} onChange={setActiveSection} />
+        </div>
+
+        {/* 下部固定タブ (スマホ) */}
+        <div className="lg:hidden">
+          <SectionNav
+            variant="mobile"
+            project={draft}
+            activeId={activeSection}
+            onChange={setActiveSection}
+          />
+        </div>
+      </div>
+
+      <WorkTypePicker
+        open={typePickerOpen}
+        title="工事種別を変更"
+        current={draft.workType}
+        onClose={() => setTypePickerOpen(false)}
+        onPick={changeWorkType}
+      />
+    </div>
+  )
+}
+
+// ============================================================
+// パーツ
+// ============================================================
+function MetaFields({
+  draft,
+  patchMeta,
+}: {
+  draft: Project
+  patchMeta: <K extends keyof Project>(k: K, v: Project[K]) => void
+}) {
+  return (
+    <>
+      <div className="hidden lg:block">
+        <label className="field-label">現場名</label>
+        <input
+          className="input mt-1"
+          value={draft.siteName}
+          onChange={e => patchMeta('siteName', e.target.value)}
+          placeholder="〇〇ビル"
+        />
+      </div>
+      <div>
+        <label className="field-label">日付</label>
+        <input
+          type="date"
+          className="input mt-1"
+          value={draft.date}
+          onChange={e => patchMeta('date', e.target.value)}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="field-label">担当者</label>
+          <input
+            className="input mt-1"
+            value={draft.inCharge}
+            onChange={e => patchMeta('inCharge', e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="field-label">確認者</label>
+          <input
+            className="input mt-1"
+            value={draft.confirmer}
+            onChange={e => patchMeta('confirmer', e.target.value)}
+          />
+        </div>
+      </div>
+    </>
+  )
+}
+
+function ProgressBar({ prog }: { prog: ReturnType<typeof calcTotalProgress> | null }) {
+  if (!prog) return null
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs text-ink-muted mb-1.5">
+        <span className="font-medium">入力進捗</span>
+        <span className="tabular-nums">
+          {prog.filled}/{prog.total}（{Math.round(prog.ratio * 100)}%）
+        </span>
+      </div>
+      <div className="h-2 bg-surface-border rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-brand-500 to-brand-700 rounded-full transition-[width]"
+          style={{ width: `${Math.max(prog.ratio * 100, 4)}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function ThinProgress({ prog }: { prog: ReturnType<typeof calcTotalProgress> }) {
+  return (
+    <div className="h-1 bg-surface-border">
+      <div
+        className="h-full bg-gradient-to-r from-brand-500 to-brand-700 transition-[width]"
+        style={{ width: `${prog.ratio * 100}%` }}
+      />
+    </div>
+  )
+}
+
+function SaveStatus({ savedAt, compact }: { savedAt: number | null; compact?: boolean }) {
+  if (!savedAt) {
+    return (
+      <span className={clsx('inline-flex items-center gap-1 text-xs text-ink-subtle', compact ? '' : 'mt-1')}>
+        <Save size={12} /> 未保存
+      </span>
+    )
+  }
+  return (
+    <span className={clsx('inline-flex items-center gap-1 text-xs text-emerald-600', compact ? '' : 'mt-1')}>
+      <Check size={12} /> 保存済み
+    </span>
+  )
+}
+
+function SectionStatBadge({ sectionId, project }: { sectionId: string; project: Project }) {
+  const s = calcSectionProgress(sectionId, project)
+  return (
+    <span className="text-xs text-ink-subtle tabular-nums">
+      {s.filled}/{s.total} 項目入力済み
+    </span>
+  )
+}
+
+function PhaseSwitcher({
+  activePhase,
+  onChange,
+  sameForBoth,
+  onToggleSame,
+}: {
+  activePhase: Phase
+  onChange: (p: Phase) => void
+  sameForBoth: boolean
+  onToggleSame: () => void
+}) {
+  return (
+    <div className="mb-4 card p-3 sm:p-4 bg-brand-50/40 border-brand-200">
+      <div className="flex flex-wrap items-center gap-2 justify-between">
+        <div className="text-xs sm:text-sm text-ink-muted">
+          仮設は<strong className="text-ink mx-0.5">設置時</strong>と
+          <strong className="text-ink mx-0.5">撤去時</strong>でそれぞれ確認します
+        </div>
+        {/* 同一条件スイッチ */}
+        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+          <span className="text-xs sm:text-sm text-ink-muted">設置=撤去で同一条件</span>
+          <span
+            className={clsx(
+              'relative inline-block w-9 h-5 rounded-full transition',
+              sameForBoth ? 'bg-brand-700' : 'bg-surface-border',
+            )}
+            onClick={onToggleSame}
+          >
+            <span
+              className={clsx(
+                'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
+                sameForBoth ? 'translate-x-[1.125rem]' : 'translate-x-0.5',
+              )}
+            />
+          </span>
+        </label>
+      </div>
+      {!sameForBoth && (
+        <div className="mt-3 grid grid-cols-2 gap-1.5 p-1 bg-surface rounded-xl border border-surface-border">
+          <PhaseTab label="設置時" value="setup"   active={activePhase} onClick={onChange} />
+          <PhaseTab label="撤去時" value="removal" active={activePhase} onClick={onChange} />
+        </div>
+      )}
+      {sameForBoth && (
+        <p className="mt-2 text-xs text-ink-subtle">
+          ※ 設置時の入力内容が撤去時にもそのまま使われます
+        </p>
+      )}
+    </div>
+  )
+}
+
+function PhaseTab({
+  label,
+  value,
+  active,
+  onClick,
+}: {
+  label: string
+  value: Phase
+  active: Phase
+  onClick: (p: Phase) => void
+}) {
+  const isActive = value === active
+  return (
+    <button
+      onClick={() => onClick(value)}
+      className={clsx(
+        'py-2 rounded-lg text-sm font-medium transition',
+        isActive ? 'bg-brand-700 text-white shadow-sm' : 'text-ink-muted hover:bg-brand-50',
+      )}
+    >
+      {label}
+    </button>
+  )
+}
+
+function SectionPager({ activeId, onChange }: { activeId: string; onChange: (id: string) => void }) {
+  const idx = SECTIONS.findIndex(s => s.id === activeId)
+  const prev = idx > 0 ? SECTIONS[idx - 1] : null
+  const next = idx < SECTIONS.length - 1 ? SECTIONS[idx + 1] : null
+  return (
+    <div className="mt-6 flex items-center justify-between gap-3">
+      <button
+        className="btn-outline disabled:invisible"
+        disabled={!prev}
+        onClick={() => prev && onChange(prev.id)}
+      >
+        <ChevronLeft size={14} />
+        <span className="truncate max-w-[10rem]">{prev?.title ?? ''}</span>
+      </button>
+      <button
+        className="btn-primary disabled:invisible"
+        disabled={!next}
+        onClick={() => next && onChange(next.id)}
+      >
+        <span className="truncate max-w-[10rem]">{next?.title ?? ''}</span>
+        <ChevronLeft size={14} className="rotate-180" />
+      </button>
+    </div>
+  )
+}

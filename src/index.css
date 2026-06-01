@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-surface-alt text-ink antialiased;
+    font-feature-settings: "palt";
+  }
+  /* iOSのタップハイライト除去 */
+  * { -webkit-tap-highlight-color: transparent; }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface rounded-2xl shadow-card border border-surface-border;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+           font-medium text-sm transition active:scale-[0.98] disabled:opacity-50
+           disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-brand-700 text-white hover:bg-brand-800 shadow-sm;
+  }
+  .btn-ghost {
+    @apply btn text-brand-700 hover:bg-brand-50;
+  }
+  .btn-outline {
+    @apply btn border border-surface-border text-ink hover:border-brand-300 hover:bg-brand-50/40;
+  }
+
+  /* チェック式オプション (Chip 風) */
+  .chip {
+    @apply inline-flex items-center justify-center px-3 py-1.5 rounded-full
+           text-sm border border-surface-border text-ink-muted bg-surface
+           transition cursor-pointer select-none;
+  }
+  .chip:hover {
+    @apply border-brand-300 text-ink;
+  }
+  .chip-active {
+    @apply bg-brand-700 border-brand-700 text-white shadow-sm;
+  }
+  .chip-active:hover {
+    @apply bg-brand-800 border-brand-800 text-white;
+  }
+
+  .field-label {
+    @apply text-[13px] font-semibold text-ink tracking-wide;
+  }
+  .field-hint {
+    @apply text-xs text-ink-subtle;
+  }
+  .input {
+    @apply w-full bg-surface rounded-xl border border-surface-border px-3 py-2.5
+           text-sm text-ink placeholder:text-ink-subtle
+           focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-500;
+  }
+
+  /* セクション・タブ用バッジ */
+  .badge {
+    @apply inline-flex items-center justify-center min-w-[1.5rem] h-5 px-1.5
+           rounded-full text-[11px] font-semibold leading-none;
+  }
+  .badge-done   { @apply bg-emerald-100 text-emerald-700; }
+  .badge-partial{ @apply bg-amber-100 text-amber-700; }
+  .badge-empty  { @apply bg-surface-border text-ink-subtle; }
+}

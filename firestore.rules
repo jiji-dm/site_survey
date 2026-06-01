@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// ============================================================
+// Firestore Security Rules - Site Survey
+// ------------------------------------------------------------
+// - @vacancorp.com の Googleアカウントだけが読み書き可能
+// - 自分が所有 or 共有された現場のみアクセス可
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- ヘルパー関数 ---
+    function isVacanUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.matches('.*@vacancorp[.]com$');
+    }
+
+    function isOwner(resource) {
+      return resource.data.ownerEmail == request.auth.token.email;
+    }
+
+    function isShared(resource) {
+      return request.auth.token.email in resource.data.sharedEmails;
+    }
+
+    // --- projects コレクション ---
+    match /projects/{projectId} {
+      // 読み取り: ドメイン縛り + (オーナー or 共有メンバー)
+      allow read: if isVacanUser() && (isOwner(resource) || isShared(resource));
+
+      // 作成: ドメイン縛り + ownerEmail を自分にしているか
+      allow create: if isVacanUser()
+                    && request.resource.data.ownerEmail == request.auth.token.email;
+
+      // 更新: オーナーまたは編集権限のある共有メンバー
+      // ※ ownerEmail を勝手に書き換えられないようにする
+      allow update: if isVacanUser()
+                    && (isOwner(resource) || isShared(resource))
+                    && request.resource.data.ownerEmail == resource.data.ownerEmail;
+
+      // 削除: オーナーのみ
+      allow delete: if isVacanUser() && isOwner(resource);
+    }
+  }
+}
