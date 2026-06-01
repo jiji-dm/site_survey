@@ -1,25 +1,31 @@
-import { useState } from 'react'
-import { ClipboardCheck, LogIn, AlertCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ClipboardCheck, LogIn, AlertCircle, Loader2 } from 'lucide-react'
 import { signInWithGoogle, ALLOWED_DOMAINS, signOut } from '../lib/firebase'
 
 interface Props {
   /** 「アクセス権限がない」ケースのメッセージ表示用 */
   unauthorizedEmail?: string | null
+  /** リダイレクト復帰時のエラー */
+  error?: string | null
 }
 
-export default function Login({ unauthorizedEmail }: Props) {
+export default function Login({ unauthorizedEmail, error: externalError }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (externalError) setError(externalError)
+  }, [externalError])
 
   async function handleSignIn() {
     setError(null)
     setLoading(true)
     try {
       await signInWithGoogle()
+      // signInWithRedirect の場合、ここから先は通常実行されない（ブラウザがリダイレクトする）
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg)
-    } finally {
       setLoading(false)
     }
   }
@@ -72,8 +78,8 @@ export default function Login({ unauthorizedEmail }: Props) {
                 disabled={loading}
                 className="btn-primary w-full"
               >
-                <LogIn size={16} />
-                {loading ? 'ログイン中...' : 'Googleでログイン'}
+                {loading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+                {loading ? 'リダイレクト中...' : 'Googleでログイン'}
               </button>
 
               {error && (
@@ -83,6 +89,11 @@ export default function Login({ unauthorizedEmail }: Props) {
                   <div>{error}</div>
                 </div>
               )}
+
+              <p className="text-[11px] text-ink-subtle mt-4 leading-relaxed">
+                ボタンを押すと Google のログインページに移動します。<br />
+                認証が完了するとこのページに戻ってきます。
+              </p>
             </>
           )}
         </div>

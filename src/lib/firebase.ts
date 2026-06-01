@@ -2,15 +2,21 @@
 // Firebase の初期化
 // ------------------------------------------------------------
 // - Authentication: Google ログイン + ドメイン制限
+//   * signInWithRedirect 方式（ポップアップを使わない）を採用
+//   * Safari / Workspace のサードパーティ制限 / Cookie ブロックなど
+//     ポップアップが詰まる環境でも安定して動く
 // - Firestore: チェックリスト本体の保存
 // ============================================================
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import {
   getAuth,
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as fbSignOut,
   onAuthStateChanged,
+  browserLocalPersistence,
+  setPersistence,
   type User,
 } from 'firebase/auth'
 import { getFirestore, type Firestore } from 'firebase/firestore'
@@ -33,6 +39,8 @@ let db: Firestore | null = null
 if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig)
   db = getFirestore(app)
+  // 永続化方式をブラウザのlocalStorageに（リダイレクト後も維持できるように）
+  setPersistence(getAuth(app), browserLocalPersistence).catch(() => {/* ignore */})
 }
 
 export { app, db }
@@ -52,24 +60,49 @@ export function isAllowedEmail(email: string | null | undefined): boolean {
 }
 
 // ------------------------------------------------------------
-// Auth ラッパー
+// Auth ラッパー (signInWithRedirect方式)
 // ------------------------------------------------------------
-export async function signInWithGoogle(): Promise<User> {
+/**
+ * Google ログインをリダイレクトで開始する。
+ * 呼ぶとそのままGoogleの認証ページに遷移するので、戻り値はない。
+ * 復帰時の処理は handleAuthRedirect() で行う。
+ */
+export async function signInWithGoogle(): Promise<void> {
   if (!app) throw new Error('Firebase が設定されていません')
   const auth = getAuth(app)
   const provider = new GoogleAuthProvider()
-  // 許可ドメインのアカウント選択を促す（Workspace向け）
+  // 許可ドメインのアカウント選択を促す（Workspace向けヒント）
   if (ALLOWED_DOMAINS.length === 1) {
     provider.setCustomParameters({ hd: ALLOWED_DOMAINS[0] })
   }
-  const cred = await signInWithPopup(auth, provider)
-  if (!isAllowedEmail(cred.user.email)) {
-    await fbSignOut(auth)
-    throw new Error(
-      `このメールアドレスではログインできません（許可ドメイン: ${ALLOWED_DOMAINS.join(', ')}）`,
-    )
+  await signInWithRedirect(auth, provider)
+  // 注意: ここから先のコードは実行されない（ブラウザがリダイレクトする）
+}
+
+/**
+ * リダイレクト復帰時に呼ぶ処理。
+ * - ドメイン外なら強制サインアウトしてエラーを投げる
+ * - 戻り値: 認証されたUser、または null (まだ復帰待ちでない)
+ *
+ * App 起動時に1度だけ呼ぶ。
+ */
+export async function handleAuthRedirect(): Promise<User | null> {
+  if (!app) return null
+  const auth = getAuth(app)
+  try {
+    const result = await getRedirectResult(auth)
+    if (!result) return null
+    if (!isAllowedEmail(result.user.email)) {
+      await fbSignOut(auth)
+      throw new Error(
+        `このメールアドレスではログインできません（許可ドメイン: ${ALLOWED_DOMAINS.join(', ')}）`,
+      )
+    }
+    return result.user
+  } catch (e) {
+    // FirebaseのエラーをUI側でわかりやすく扱えるように再スロー
+    throw e
   }
-  return cred.user
 }
 
 export async function signOut(): Promise<void> {
