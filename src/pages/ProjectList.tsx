@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, CalendarDays, User, ChevronRight, Trash2 } from 'lucide-react'
+import { Plus, CalendarDays, User, ChevronRight, Trash2, Cloud, HardDrive } from 'lucide-react'
 import { newProject, saveProject, deleteProject } from '../lib/store'
 import { useProjects } from '../hooks/useProjects'
+import { useAuth } from '../hooks/useAuth'
 import { calcTotalProgress } from '../lib/progress'
 import WorkTypeBadge from '../components/WorkTypeBadge'
 import WorkTypePicker from '../components/WorkTypePicker'
@@ -11,6 +12,7 @@ import type { WorkType } from '../types/checklist'
 export default function ProjectList() {
   const navigate = useNavigate()
   const projects = useProjects()
+  const auth = useAuth()
   const [pickerOpen, setPickerOpen] = useState(false)
 
   async function handlePick(workType: WorkType) {
@@ -109,9 +111,20 @@ export default function ProjectList() {
         </div>
       )}
 
-      <p className="mt-8 text-xs text-ink-subtle text-center">
-        ※ 現在はローカル(IndexedDB)で動作中。Firebase設定後にクラウド同期されます。
-      </p>
+      {/* ステータス表示 */}
+      <div className="mt-8 flex justify-center">
+        {auth.status === 'signed-in' ? (
+          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+            <Cloud size={12} />
+            クラウド同期中（{auth.user.email}）
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+            <HardDrive size={12} />
+            ローカルのみ（このブラウザ内にだけ保存）
+          </span>
+        )}
+      </div>
 
       <WorkTypePicker
         open={pickerOpen}
