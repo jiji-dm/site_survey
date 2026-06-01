@@ -22,7 +22,7 @@ export default function Login({ unauthorizedEmail, error: externalError }: Props
     setLoading(true)
     try {
       await signInWithGoogle()
-      // signInWithRedirect の場合、ここから先は通常実行されない（ブラウザがリダイレクトする）
+      // 成功時は onAuthStateChanged が発火して App 側で画面が切り替わる
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg)
@@ -79,7 +79,7 @@ export default function Login({ unauthorizedEmail, error: externalError }: Props
                 className="btn-primary w-full"
               >
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-                {loading ? 'リダイレクト中...' : 'Googleでログイン'}
+                {loading ? 'ログイン中...' : 'Googleでログイン'}
               </button>
 
               {error && (
@@ -91,8 +91,8 @@ export default function Login({ unauthorizedEmail, error: externalError }: Props
               )}
 
               <p className="text-[11px] text-ink-subtle mt-4 leading-relaxed">
-                ボタンを押すと Google のログインページに移動します。<br />
-                認証が完了するとこのページに戻ってきます。
+                ボタンを押すと Google のログイン画面がポップアップで開きます。<br />
+                認証が完了すると自動的にアプリに進みます。
               </p>
             </>
           )}
