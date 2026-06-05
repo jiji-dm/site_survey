@@ -5,7 +5,8 @@
 // オンライン時に Firestore へ同期するための土台。
 // ============================================================
 import Dexie, { type EntityTable } from 'dexie'
-import type { Project, Values, WorkType } from '../types/checklist'
+import type { Project, Values, WorkType, SurveyArea } from '../types/checklist'
+import { PER_AREA_FIELD_IDS } from '../data/schema'
 
 class SiteSurveyDB extends Dexie {
   projects!: EntityTable<Project, 'id'>
@@ -24,6 +25,26 @@ class SiteSurveyDB extends Dexie {
       .upgrade(tx => {
         return tx.table('projects').toCollection().modify(p => {
           if (!p.workType) p.workType = 'install'
+        })
+      })
+    // v3: エリア追加（マイグレーション: 既存のフラットな values から
+    //     perArea フィールドを "エリア1" に切り出す）
+    this.version(3)
+      .stores({
+        projects: 'id, updatedAt, siteName, ownerEmail, workType',
+      })
+      .upgrade(tx => {
+        return tx.table('projects').toCollection().modify(p => {
+          if (Array.isArray(p.areas) && p.areas.length > 0) return
+          const values: Values = p.values ?? {}
+          const moved: Values = {}
+          const rest: Values = {}
+          for (const k of Object.keys(values)) {
+            if (PER_AREA_FIELD_IDS.has(k)) moved[k] = values[k]
+            else rest[k] = values[k]
+          }
+          p.values = rest
+          p.areas = [{ id: 'area-1', name: 'エリア1', values: moved }]
         })
       })
   }
@@ -46,6 +67,10 @@ function makeId(): string {
 export function newProject(partial: Partial<Project> = {}): Project {
   const now = Date.now()
   const workType: WorkType = partial.workType ?? 'install'
+  const areas: SurveyArea[] =
+    partial.areas && partial.areas.length > 0
+      ? partial.areas
+      : [{ id: 'area-1', name: 'エリア1', values: {} }]
   return {
     id: makeId(),
     workType,
@@ -54,6 +79,7 @@ export function newProject(partial: Partial<Project> = {}): Project {
     inCharge: partial.inCharge ?? '',
     confirmer: partial.confirmer ?? '',
     values: partial.values ?? {},
+    areas,
     phaseValues: partial.phaseValues ?? (workType === 'temporary'
       ? { setup: {}, removal: {} }
       : undefined),

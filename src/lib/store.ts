@@ -29,6 +29,7 @@ import {
   newProject,
 } from './db'
 import type { Project } from '../types/checklist'
+import { normalizeProject } from '../data/schema'
 
 export { newProject }
 
@@ -173,7 +174,7 @@ function toFirestore(p: Project): Record<string, unknown> {
 
 function fromFirestore(id: string, data: Record<string, unknown>): Project {
   const d = data as Partial<Project> & { sharedEmails?: string[] }
-  return {
+  return normalizeProject({
     id,
     workType: (d.workType as Project['workType']) ?? 'install',
     siteName: d.siteName ?? '',
@@ -181,6 +182,7 @@ function fromFirestore(id: string, data: Record<string, unknown>): Project {
     inCharge: d.inCharge ?? '',
     confirmer: d.confirmer ?? '',
     values: d.values ?? {},
+    areas: d.areas ?? [],
     phaseValues: d.phaseValues,
     phaseSameAs: d.phaseSameAs,
     ownerEmail: d.ownerEmail ?? '',
@@ -188,5 +190,5 @@ function fromFirestore(id: string, data: Record<string, unknown>): Project {
     updatedAt: typeof d.updatedAt === 'number' ? d.updatedAt : Date.now(),
     updatedBy: d.updatedBy,
     createdAt: typeof d.createdAt === 'number' ? d.createdAt : Date.now(),
-  }
+  })
 }

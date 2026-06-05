@@ -25,22 +25,16 @@ export const SECTIONS: Section[] = [
     id: 'installation',
     title: '設置・機器',
     accent: '#7044a4',
+    perArea: true,
     groups: [
-      {
-        id: 'place',
-        title: '設置場所',
-        fields: [
-          { id: 'place_count', label: '箇所数', type: 'number', suffix: '箇所' },
-        ],
-      },
       {
         id: 'material',
         title: '壁・天井材質（磁石確認）',
         description: '材質と磁石の付着可否を確認',
         fields: [
-          { id: 'wall_material', label: '壁', type: 'single', options: ['ボード', 'パネル', 'その他'] },
+          { id: 'wall_material', label: '壁', type: 'single', options: ['ボード', 'パネル', 'コンクリ', 'その他'] },
           { id: 'wall_magnet',   label: '壁 磁石', type: 'single', options: ['有', '無'] },
-          { id: 'ceiling_material', label: '天井', type: 'single', options: ['ボード', 'ジプトーン', 'パネル', 'その他'] },
+          { id: 'ceiling_material', label: '天井', type: 'single', options: ['ボード', 'ジプトーン', 'パネル', 'コンクリ', 'その他'] },
           { id: 'ceiling_magnet',   label: '天井 磁石', type: 'single', options: ['有', '無'] },
           { id: 'material_photo',   label: '全ての箇所の写真（材質わかるもの）を撮影', type: 'check' },
 
@@ -72,17 +66,9 @@ export const SECTIONS: Section[] = [
         title: 'カメラ設置箇所',
         fields: [
           { id: 'camera_count',  label: 'カメラ台数', type: 'number', suffix: '台' },
+          { id: 'camera_height', label: 'カメラ高さ', type: 'height', suffix: 'mm', hint: '単一値 or 範囲で指定' },
           { id: 'camera_photo',  label: '写真撮影（before / after 意識）', type: 'check' },
-          { id: 'camera_height_note', label: 'カメラ高さ寸法メモ', type: 'text', hint: '補足: 高さ寸法の確認結果' },
-        ],
-      },
-      {
-        id: 'wiring',
-        title: '配管・配線',
-        fields: [
-          // 配線ルートの確認は撤去・移設では不要
-          { id: 'wiring_route_optimal', label: '配線ルートで一番簡単な方法を突き詰めた', type: 'check', showFor: NON_REMOVAL },
-          { id: 'wiring_note', label: '配線メモ', type: 'memo' },
+          { id: 'camera_height_note', label: 'カメラ高さ寸法メモ', type: 'text', hint: '補足: 高さ寸法の確認結果', noCount: true },
         ],
       },
     ],
@@ -95,14 +81,23 @@ export const SECTIONS: Section[] = [
     id: 'power_network',
     title: '電源・ネットワーク',
     accent: '#5d3290',
+    perArea: true,
     groups: [
       {
         id: 'power',
         title: '電源',
         fields: [
           { id: 'outlet_type',  label: 'コンセント種類', type: 'single', options: ['2P', '3P'] },
-          { id: 'outlet_note',  label: 'コンセント位置メモ', type: 'text' },
-          { id: 'outlet_avail', label: '既存コンセント空き状況', type: 'text' },
+          { id: 'outlet_note',  label: 'コンセント位置メモ', type: 'text', noCount: true },
+          { id: 'outlet_avail', label: '既存コンセント空き状況', type: 'single', options: ['有', '無'] },
+          { id: 'power_24h',      label: '24時間通電', type: 'single', options: ['有', '無'] },
+          {
+            id: 'power_24h_note',
+            label: '通電条件・補足',
+            type: 'memo',
+            hint: '通電する時間帯・条件・ブレーカー位置など',
+            showWhen: { field: 'power_24h', equals: '無' },
+          },
         ],
       },
       // ▼ ネットワーク項目グループは撤去・移設では不要
@@ -111,8 +106,30 @@ export const SECTIONS: Section[] = [
         title: 'ネットワーク',
         showFor: NON_REMOVAL,
         fields: [
-          { id: 'wifi_status', label: 'ネットワーク状態（Wi-Fi）', type: 'text', hint: '受信状況・SSID等' },
-          { id: 'lan_port',    label: 'ネットワーク口の有無・位置', type: 'text' },
+          { id: 'use_existing_network', label: '既設のネットワークを使用', type: 'single', options: ['可', '不可', '未定'] },
+          // ▼ 「可」「未定」のときのみ表示（不可なら詳細は不要）
+          { id: 'wifi_status', label: 'ネットワーク状態（Wi-Fi）', type: 'text', hint: '受信状況・SSID等', showWhen: { field: 'use_existing_network', equals: ['可', '未定'] } },
+          { id: 'lan_port',    label: 'ネットワーク口の有無・位置', type: 'text', showWhen: { field: 'use_existing_network', equals: ['可', '未定'] } },
+        ],
+      },
+      // ▼ VLAFS計測（計測時間の記録）— BOX台数ぶん計測、撤去・移設では不要
+      {
+        id: 'vla_fs',
+        title: 'VLAFS計測',
+        description: 'BOX台数ぶん計測。各BOXの開始・終了で所要時間を記録します',
+        showFor: NON_REMOVAL,
+        fields: [
+          { id: 'vla_fs_time', label: '計測時間', type: 'stopwatch', countFrom: 'box_count' },
+        ],
+      },
+      // ▼ ネット回線測定（現地）— キャリア別 ○△✕、BOX数ぶん行が増える、撤去・移設では不要
+      {
+        id: 'net_onsite',
+        title: 'ネット回線測定（現地）',
+        description: 'BOX台数ぶん測定。各キャリアを ○（良好）／△（やや弱い）／✕（不可）で判定',
+        showFor: NON_REMOVAL,
+        fields: [
+          { id: 'net_onsite_result', label: 'キャリア別 受信判定', type: 'carrier_matrix', countFrom: 'box_count' },
         ],
       },
     ],
@@ -127,16 +144,6 @@ export const SECTIONS: Section[] = [
     accent: '#9069bd',
     dualPhase: true,
     groups: [
-      // ▼ 裏側・障害物グループは撤去・移設では不要
-      {
-        id: 'inner',
-        title: '裏側・障害物',
-        showFor: NON_REMOVAL,
-        fields: [
-          { id: 'inside_ceiling', label: '天井裏・壁裏（配線）', type: 'single', options: ['確認済み', '不明', '可', '否'] },
-          { id: 'obstacle',       label: '障害物',               type: 'single', options: ['確認済み', '不明', '可', '否'] },
-        ],
-      },
       {
         id: 'access',
         title: '高所作業',
@@ -180,10 +187,20 @@ export const SECTIONS: Section[] = [
         title: '工事時間・立ち会い',
         fields: [
           { id: 'work_time',   label: '工事可能時間', type: 'single', options: ['日中', '夜間', '時間指定有'] },
-          { id: 'work_time_note', label: '時間メモ', type: 'text', hint: '時間指定がある場合の詳細' },
+          { id: 'work_time_note', label: '時間メモ', type: 'text', hint: '時間指定がある場合の詳細', noCount: true },
           { id: 'attend_during', label: '作業中の立ち合い', type: 'single', options: ['必要', '不要'] },
+          // ▼ 「必要」のとき立ち合い者詳細
+          { id: 'attend_during_detail', label: '立ち合い者詳細', type: 'memo', hint: '氏名・所属・連絡先など', showWhen: { field: 'attend_during', equals: '必要' } },
+
           { id: 'attend_startend', label: '作業開始/終了時の対応', type: 'single', options: ['必要', '不要'] },
+          // ▼ 「必要」のとき担当者名・電話番号
+          { id: 'attend_startend_person', label: '担当者名', type: 'text', showWhen: { field: 'attend_startend', equals: '必要' } },
+          { id: 'attend_startend_phone',  label: '電話番号', type: 'text', hint: '連絡先電話番号', showWhen: { field: 'attend_startend', equals: '必要' } },
+
           { id: 'work_notice', label: '作業届の有無', type: 'single', options: ['有', '無'] },
+          // ▼ 「有」のときメモ＋提出済みチェック
+          { id: 'work_notice_memo', label: '作業届メモ', type: 'memo', hint: '提出先・期限・内容など', showWhen: { field: 'work_notice', equals: '有' } },
+          { id: 'work_notice_submitted', label: '提出済み', type: 'single', options: ['有', '無'], showWhen: { field: 'work_notice', equals: '有' } },
         ],
       },
     ],
@@ -212,28 +229,88 @@ export const SECTIONS: Section[] = [
 ]
 
 // ============================================================
+// エリア別セクションのヘルパー
+// ============================================================
+import type { Field, FieldGroup, Values, Project, SurveyArea } from '../types/checklist'
+
+/** perArea = true のセクションID集合 */
+export const PER_AREA_SECTION_IDS = new Set(
+  SECTIONS.filter(s => s.perArea).map(s => s.id),
+)
+
+/** エリア別セクションに属する全フィールドIDの集合（マイグレーション用） */
+export const PER_AREA_FIELD_IDS: Set<string> = new Set(
+  SECTIONS.filter(s => s.perArea).flatMap(s =>
+    s.groups.flatMap(g => g.fields.map(f => f.id)),
+  ),
+)
+
+let areaSeq = 0
+/** エリアIDを生成（時刻に依存しない安定生成） */
+function makeAreaId(): string {
+  areaSeq += 1
+  return `area-${areaSeq}-${areaSeq.toString(36)}${(areaSeq * 7).toString(36)}`
+}
+
+/** 新しい空エリアを作る */
+export function makeArea(name: string, values: Values = {}): SurveyArea {
+  return { id: makeAreaId(), name, values }
+}
+
+/**
+ * 旧データ（areas を持たない or 空）を正規化する。
+ * - areas が無ければ "エリア1" を1件作成
+ * - その際、フラットな values に紛れている perArea フィールドの値を最初のエリアへ移す
+ * 既に areas を持つ場合はそのまま返す（コピーは最小限）。
+ */
+export function normalizeProject(p: Project): Project {
+  if (Array.isArray(p.areas) && p.areas.length > 0) return p
+
+  const moved: Values = {}
+  const rest: Values = {}
+  for (const [k, v] of Object.entries(p.values ?? {})) {
+    if (PER_AREA_FIELD_IDS.has(k)) moved[k] = v
+    else rest[k] = v
+  }
+  return {
+    ...p,
+    values: rest,
+    areas: [makeArea('エリア1', moved)],
+  }
+}
+
+// ============================================================
 // 工事種別を考慮したヘルパー
 // ============================================================
-import type { Field, FieldGroup } from '../types/checklist'
+
+/** showWhen 条件を満たすか（values 未指定なら条件付きフィールドは隠す） */
+function matchesShowWhen(field: Field, values?: Values): boolean {
+  if (!field.showWhen) return true
+  if (!values) return false
+  const cur = values[field.showWhen.field]
+  const want = field.showWhen.equals
+  return Array.isArray(want) ? want.includes(cur as string) : cur === want
+}
 
 /** ある工事種別で表示すべき field か */
-export function isFieldVisible(field: Field, workType: WorkType): boolean {
-  return !field.showFor || field.showFor.includes(workType)
+export function isFieldVisible(field: Field, workType: WorkType, values?: Values): boolean {
+  if (field.showFor && !field.showFor.includes(workType)) return false
+  return matchesShowWhen(field, values)
 }
 
 /** ある工事種別で表示すべき group か（中に1つでも表示fieldがあるか） */
-export function isGroupVisible(group: FieldGroup, workType: WorkType): boolean {
+export function isGroupVisible(group: FieldGroup, workType: WorkType, values?: Values): boolean {
   if (group.showFor && !group.showFor.includes(workType)) return false
-  return group.fields.some(f => isFieldVisible(f, workType))
+  return group.fields.some(f => isFieldVisible(f, workType, values))
 }
 
 /** 指定の工事種別で実際に表示される field のリスト */
-export function visibleFields(group: FieldGroup, workType: WorkType): Field[] {
+export function visibleFields(group: FieldGroup, workType: WorkType, values?: Values): Field[] {
   if (group.showFor && !group.showFor.includes(workType)) return []
-  return group.fields.filter(f => isFieldVisible(f, workType))
+  return group.fields.filter(f => isFieldVisible(f, workType, values))
 }
 
 /** 指定の工事種別で実際に表示される group のリスト */
-export function visibleGroups(section: Section, workType: WorkType): FieldGroup[] {
-  return section.groups.filter(g => isGroupVisible(g, workType))
+export function visibleGroups(section: Section, workType: WorkType, values?: Values): FieldGroup[] {
+  return section.groups.filter(g => isGroupVisible(g, workType, values))
 }

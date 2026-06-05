@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Save, Check, Share2, Download, Settings2, Eye, Users } from 'lucide-react'
+import { ChevronLeft, Save, Check, Share2, Download, Settings2, Eye, Users, Plus, Pencil, Trash2, MapPin } from 'lucide-react'
 import clsx from 'clsx'
 import { saveProject } from '../lib/store'
 import { useProject } from '../hooks/useProjects'
 import { useAuth } from '../hooks/useAuth'
 import { calcTotalProgress, calcSectionProgress } from '../lib/progress'
-import { SECTIONS, visibleGroups, visibleFields } from '../data/schema'
-import type { FieldValue, Project, Section, Values, WorkType } from '../types/checklist'
+import { SECTIONS, visibleGroups, visibleFields, makeArea } from '../data/schema'
+import type { FieldValue, Project, Section, SurveyArea, Values, WorkType } from '../types/checklist'
 import SectionNav from '../components/SectionNav'
 import FieldRenderer from '../components/FieldRenderer'
 import WorkTypeBadge from '../components/WorkTypeBadge'
@@ -30,6 +30,7 @@ export default function ProjectEdit() {
   const [draft, setDraft] = useState<Project | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id)
+  const [activeAreaId, setActiveAreaId] = useState<string>('')
   const [activePhase, setActivePhase] = useState<Phase>('setup')
   const [typePickerOpen, setTypePickerOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
@@ -59,7 +60,12 @@ export default function ProjectEdit() {
   const active: Section = SECTIONS.find(s => s.id === activeSection) ?? SECTIONS[0]
   const isTemporary = draft.workType === 'temporary'
   const isDualPhase = !!active.dualPhase && isTemporary
+  const isPerArea = !!active.perArea
   const sameForBoth = draft.phaseSameAs?.[active.id] === true
+
+  // 選択中エリア（無効な場合は先頭にフォールバック）
+  const activeArea: SurveyArea =
+    draft.areas.find(a => a.id === activeAreaId) ?? draft.areas[0]
 
   // 権限判定
   const isOwner = !!myEmail && draft.ownerEmail === myEmail
@@ -72,16 +78,31 @@ export default function ProjectEdit() {
   // dualPhase で「同一条件」ONなら setup を有効フェーズに固定
   const effectivePhase: Phase = sameForBoth ? 'setup' : activePhase
 
-  // 値の取得・更新（dualPhaseセクション or 通常で分岐）
+  // 値の取得・更新（perArea / dualPhase / 通常 で分岐）
   function getValue(fieldId: string): FieldValue {
+    if (isPerArea) return activeArea?.values[fieldId]
     if (isDualPhase) return draft!.phaseValues?.[effectivePhase]?.[fieldId]
     return draft!.values[fieldId]
   }
+
+  // showWhen 条件判定や carrier_matrix の行数算出に使う、現在表示中の値セット
+  const sectionValues: Values = isPerArea
+    ? activeArea?.values ?? {}
+    : isDualPhase
+      ? draft.phaseValues?.[effectivePhase] ?? {}
+      : draft.values
 
   function patchValue(fieldId: string, v: FieldValue) {
     if (isReadOnly) return
     setDraft(prev => {
       if (!prev) return prev
+      if (isPerArea) {
+        const aid = activeArea?.id
+        const areas = prev.areas.map(a =>
+          a.id === aid ? { ...a, values: { ...a.values, [fieldId]: v } } : a,
+        )
+        return { ...prev, areas, updatedAt: Date.now() }
+      }
       if (isDualPhase) {
         const pv = prev.phaseValues ?? { setup: {}, removal: {} }
         const next = {
@@ -92,6 +113,36 @@ export default function ProjectEdit() {
       }
       const nextValues: Values = { ...prev.values, [fieldId]: v }
       return { ...prev, values: nextValues, updatedAt: Date.now() }
+    })
+  }
+
+  // ---- エリア操作 ----
+  function addArea() {
+    if (isReadOnly) return
+    setDraft(prev => {
+      if (!prev) return prev
+      const area = makeArea(`エリア${prev.areas.length + 1}`)
+      setActiveAreaId(area.id)
+      return { ...prev, areas: [...prev.areas, area], updatedAt: Date.now() }
+    })
+  }
+
+  function renameArea(id: string, name: string) {
+    if (isReadOnly) return
+    setDraft(prev =>
+      prev
+        ? { ...prev, areas: prev.areas.map(a => (a.id === id ? { ...a, name } : a)), updatedAt: Date.now() }
+        : prev,
+    )
+  }
+
+  function deleteArea(id: string) {
+    if (isReadOnly) return
+    setDraft(prev => {
+      if (!prev || prev.areas.length <= 1) return prev
+      const areas = prev.areas.filter(a => a.id !== id)
+      if (activeAreaId === id) setActiveAreaId(areas[0].id)
+      return { ...prev, areas, updatedAt: Date.now() }
     })
   }
 
@@ -252,8 +303,33 @@ export default function ProjectEdit() {
         <div className="flex-1 px-3 sm:px-6 lg:px-10 py-4 lg:py-8 pb-32 lg:pb-12 max-w-3xl mx-auto w-full">
           <div className="flex items-baseline justify-between mb-4 gap-3">
             <h2 className="text-xl sm:text-2xl font-bold text-ink">{active.title}</h2>
-            <SectionStatBadge sectionId={active.id} project={draft} />
+            <SectionStatBadge
+              sectionId={active.id}
+              project={draft}
+              areaId={isPerArea ? activeArea?.id : undefined}
+            />
           </div>
+
+          {/* エリア切替（perArea セクションのみ） */}
+          {isPerArea && (
+            <AreaSwitcher
+              project={draft}
+              sectionId={active.id}
+              activeAreaId={activeArea?.id ?? ''}
+              onSelect={setActiveAreaId}
+              onAdd={addArea}
+              onRename={renameArea}
+              onDelete={deleteArea}
+              readOnly={isReadOnly}
+            />
+          )}
+
+          {/* 共通カテゴリの注記 */}
+          {!isPerArea && !isDualPhase && (
+            <p className="mb-4 inline-flex items-center gap-1.5 text-xs text-ink-subtle">
+              <MapPin size={12} /> このカテゴリは現場全体で共通です
+            </p>
+          )}
 
           {/* 仮設フェーズ切替 + 同一条件スイッチ */}
           {isDualPhase && (
@@ -266,7 +342,7 @@ export default function ProjectEdit() {
           )}
 
           <div className="space-y-4">
-            {visibleGroups(active, draft.workType).map(g => (
+            {visibleGroups(active, draft.workType, sectionValues).map(g => (
               <section key={g.id} className="card p-4 sm:p-5">
                 {g.title && (
                   <h3 className="font-semibold text-[15px] text-ink mb-1.5">{g.title}</h3>
@@ -275,15 +351,21 @@ export default function ProjectEdit() {
                   <p className="text-xs text-ink-muted mb-3">{g.description}</p>
                 )}
                 <div className="space-y-4 mt-3">
-                  {visibleFields(g, draft.workType).map(f => (
-                    <FieldRenderer
-                      key={f.id}
-                      field={f}
-                      value={getValue(f.id)}
-                      onChange={v => patchValue(f.id, v)}
-                      readOnly={isReadOnly}
-                    />
-                  ))}
+                  {visibleFields(g, draft.workType, sectionValues).map(f => {
+                    const cnt = f.countFrom ? Number(sectionValues[f.countFrom]) || 0 : undefined
+                    return (
+                      <FieldRenderer
+                        key={f.id}
+                        field={f}
+                        value={getValue(f.id)}
+                        onChange={v => patchValue(f.id, v)}
+                        readOnly={isReadOnly}
+                        count={cnt}
+                        siteName={draft.siteName}
+                        date={draft.date}
+                      />
+                    )
+                  })}
                 </div>
               </section>
             ))}
@@ -426,12 +508,129 @@ function SaveStatus({ savedAt, compact }: { savedAt: number | null; compact?: bo
   )
 }
 
-function SectionStatBadge({ sectionId, project }: { sectionId: string; project: Project }) {
-  const s = calcSectionProgress(sectionId, project)
+function SectionStatBadge({
+  sectionId,
+  project,
+  areaId,
+}: {
+  sectionId: string
+  project: Project
+  areaId?: string
+}) {
+  const s = calcSectionProgress(sectionId, project, undefined, areaId)
   return (
     <span className="text-xs text-ink-subtle tabular-nums">
       {s.filled}/{s.total} 項目入力済み
     </span>
+  )
+}
+
+function AreaSwitcher({
+  project,
+  sectionId,
+  activeAreaId,
+  onSelect,
+  onAdd,
+  onRename,
+  onDelete,
+  readOnly,
+}: {
+  project: Project
+  sectionId: string
+  activeAreaId: string
+  onSelect: (id: string) => void
+  onAdd: () => void
+  onRename: (id: string, name: string) => void
+  onDelete: (id: string) => void
+  readOnly: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const canDelete = project.areas.length > 1
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-medium text-ink-muted inline-flex items-center gap-1">
+          <MapPin size={12} /> エリア（このカテゴリはエリアごとに記録）
+        </span>
+        {!readOnly && (
+          <button
+            onClick={() => setEditing(e => !e)}
+            className="text-xs text-ink-subtle hover:text-brand-700 inline-flex items-center gap-1"
+          >
+            <Pencil size={11} /> {editing ? '完了' : '編集'}
+          </button>
+        )}
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x">
+        {project.areas.map(area => {
+          const prog = calcSectionProgress(sectionId, project, undefined, area.id)
+          const isActive = area.id === activeAreaId
+          if (editing) {
+            return (
+              <div
+                key={area.id}
+                className="shrink-0 snap-start flex items-center gap-1 rounded-xl border border-surface-border bg-surface px-2 py-1.5"
+              >
+                <input
+                  value={area.name}
+                  onChange={e => onRename(area.id, e.target.value)}
+                  className="w-24 bg-transparent text-sm font-medium text-ink focus:outline-none"
+                  aria-label="エリア名"
+                />
+                <button
+                  onClick={() => canDelete && onDelete(area.id)}
+                  disabled={!canDelete}
+                  className="text-ink-subtle hover:text-red-600 disabled:opacity-30"
+                  aria-label="エリアを削除"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )
+          }
+          return (
+            <button
+              key={area.id}
+              onClick={() => onSelect(area.id)}
+              className={clsx(
+                'shrink-0 snap-start flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2 transition text-left min-w-[6rem]',
+                isActive
+                  ? 'bg-brand-700 border-brand-700 text-white shadow-sm'
+                  : 'bg-surface border-surface-border text-ink-muted hover:border-brand-200 hover:bg-brand-50',
+              )}
+            >
+              <span className="text-sm font-semibold truncate max-w-[9rem]">{area.name}</span>
+              <span
+                className={clsx(
+                  'badge tabular-nums',
+                  isActive
+                    ? 'bg-white/20 text-white'
+                    : prog.status === 'done'
+                      ? 'badge-done'
+                      : prog.status === 'partial'
+                        ? 'badge-partial'
+                        : 'badge-empty',
+                )}
+              >
+                {prog.filled}/{prog.total}
+              </span>
+            </button>
+          )
+        })}
+
+        {!readOnly && !editing && (
+          <button
+            onClick={onAdd}
+            className="shrink-0 snap-start grid place-items-center rounded-xl border border-dashed border-surface-border text-ink-subtle hover:border-brand-400 hover:text-brand-700 px-3 min-w-[3rem]"
+            aria-label="エリアを追加"
+          >
+            <Plus size={18} />
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 

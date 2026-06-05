@@ -2,15 +2,23 @@ import { Check } from 'lucide-react'
 import clsx from 'clsx'
 import type { Field, FieldValue } from '../types/checklist'
 import ChipGroup from './ChipGroup'
+import HeightInput from './HeightInput'
+import CarrierMatrix from './CarrierMatrix'
+import StopWatch from './StopWatch'
 
 interface Props {
   field: Field
   value: FieldValue
   onChange: (v: FieldValue) => void
   readOnly?: boolean
+  /** carrier_matrix の行数（BOX数）など、他フィールドから算出した補助値 */
+  count?: number
+  /** stopwatch の CSV出力に使う現場情報 */
+  siteName?: string
+  date?: string
 }
 
-export default function FieldRenderer({ field, value, onChange, readOnly }: Props) {
+export default function FieldRenderer({ field, value, onChange, readOnly, count, siteName, date }: Props) {
   return (
     <div className="space-y-1.5">
       {/* check 以外はラベルを上に */}
@@ -24,7 +32,7 @@ export default function FieldRenderer({ field, value, onChange, readOnly }: Prop
         </div>
       )}
 
-      {renderControl(field, value, onChange, !!readOnly)}
+      {renderControl(field, value, onChange, !!readOnly, count, siteName, date)}
     </div>
   )
 }
@@ -34,6 +42,9 @@ function renderControl(
   value: FieldValue,
   onChange: (v: FieldValue) => void,
   readOnly: boolean,
+  count?: number,
+  siteName?: string,
+  date?: string,
 ) {
   switch (field.type) {
     case 'single':
@@ -75,6 +86,16 @@ function renderControl(
           )}
         </div>
       )
+    case 'height':
+      return (
+        <HeightInput
+          value={value}
+          onChange={v => onChange(v)}
+          presets={field.presets}
+          suffix={field.suffix}
+          readOnly={readOnly}
+        />
+      )
     case 'text':
       return (
         <input
@@ -95,6 +116,26 @@ function renderControl(
           onChange={e => onChange(e.target.value)}
           placeholder={field.hint ?? ''}
           disabled={readOnly}
+        />
+      )
+    case 'carrier_matrix':
+      return (
+        <CarrierMatrix
+          count={count ?? 0}
+          value={value}
+          onChange={v => onChange(v)}
+          readOnly={readOnly}
+        />
+      )
+    case 'stopwatch':
+      return (
+        <StopWatch
+          count={count ?? 0}
+          value={value}
+          onChange={v => onChange(v)}
+          readOnly={readOnly}
+          siteName={siteName}
+          date={date}
         />
       )
     case 'check': {

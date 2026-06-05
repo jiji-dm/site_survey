@@ -9,6 +9,15 @@ function isFilled(type: FieldType, v: unknown): boolean {
   if (type === 'number') return typeof v === 'number' && !Number.isNaN(v)
   if (type === 'check')  return v === true
   if (type === 'multi')  return Array.isArray(v) && v.length > 0
+  if (type === 'carrier_matrix') {
+    return typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length > 0
+  }
+  if (type === 'stopwatch') {
+    if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+    // BOX台数ぶんのどれか1つでも開始時刻が記録されていれば入力済み
+    return Object.entries(v as Record<string, unknown>)
+      .some(([k, val]) => k.endsWith('startAt') && typeof val === 'number')
+  }
   return typeof v === 'string' ? v.trim().length > 0 : !!v
 }
 
@@ -36,9 +45,31 @@ export function calcSectionProgress(
   sectionId: string,
   project: Project,
   phase?: 'setup' | 'removal' | null,
+  /** perArea セクションで特定エリアのみ集計する場合に指定（省略時は全エリア合算） */
+  areaId?: string,
 ): ProgressStat {
   const s = SECTIONS.find(x => x.id === sectionId)
   if (!s) return { filled: 0, total: 0, ratio: 0, status: 'empty' }
+
+  // エリア別セクション: 指定があればそのエリア、無ければ全エリア合算
+  if (s.perArea) {
+    const areas = areaId
+      ? project.areas.filter(a => a.id === areaId)
+      : project.areas
+    let filled = 0
+    let total = 0
+    for (const a of areas) {
+      for (const g of visibleGroups(s, project.workType, a.values)) {
+        for (const f of visibleFields(g, project.workType, a.values)) {
+          // 付随メモなどは進捗カウントから除外（memo型は既定で対象外）
+          if (f.type === 'memo' || f.noCount) continue
+          total++
+          if (isFilled(f.type, a.values[f.id])) filled++
+        }
+      }
+    }
+    return statFrom(filled, total)
+  }
 
   // 仮設で dualPhase セクションの場合、未指定なら 設置/撤去 両方合算（同一条件ONなら片方のみ）
   if (s.dualPhase && project.workType === 'temporary' && !phase) {
@@ -57,8 +88,10 @@ export function calcSectionProgress(
   const values = getValuesForSection(project, phase ?? null)
   let filled = 0
   let total = 0
-  for (const g of visibleGroups(s, project.workType)) {
-    for (const f of visibleFields(g, project.workType)) {
+  for (const g of visibleGroups(s, project.workType, values)) {
+    for (const f of visibleFields(g, project.workType, values)) {
+      // 付随メモなどは進捗カウントから除外（memo型は既定で対象外）
+      if (f.type === 'memo' || f.noCount) continue
       total++
       if (isFilled(f.type, values[f.id])) filled++
     }
@@ -88,6 +121,6 @@ function statFrom(filled: number, total: number): ProgressStat {
 export function calcTotalProgressFromValues(values: Values, workType: WorkType = 'install'): ProgressStat {
   return calcTotalProgress({
     id: '', workType, siteName: '', date: '', inCharge: '', confirmer: '',
-    values, ownerEmail: '', sharedWith: [], createdAt: 0, updatedAt: 0,
+    values, areas: [], ownerEmail: '', sharedWith: [], createdAt: 0, updatedAt: 0,
   })
 }

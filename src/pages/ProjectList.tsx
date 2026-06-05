@@ -7,19 +7,36 @@ import { useAuth } from '../hooks/useAuth'
 import { calcTotalProgress } from '../lib/progress'
 import WorkTypeBadge from '../components/WorkTypeBadge'
 import WorkTypePicker from '../components/WorkTypePicker'
-import type { WorkType } from '../types/checklist'
+import AreaSetupDialog from '../components/AreaSetupDialog'
+import type { SurveyArea, WorkType } from '../types/checklist'
 
 export default function ProjectList() {
   const navigate = useNavigate()
   const projects = useProjects()
   const auth = useAuth()
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [areaSetupOpen, setAreaSetupOpen] = useState(false)
+  const [pendingWorkType, setPendingWorkType] = useState<WorkType | null>(null)
 
-  async function handlePick(workType: WorkType) {
-    const p = newProject({ workType })
-    await saveProject(p)
+  // 工事種別を選んだら、次に「エリア作成」ステップへ
+  function handlePick(workType: WorkType) {
+    setPendingWorkType(workType)
     setPickerOpen(false)
+    setAreaSetupOpen(true)
+  }
+
+  // エリア確定 → プロジェクト作成して編集画面へ
+  async function handleAreaConfirm(areas: SurveyArea[]) {
+    const p = newProject({ workType: pendingWorkType ?? 'install', areas })
+    await saveProject(p)
+    setAreaSetupOpen(false)
+    setPendingWorkType(null)
     navigate(`/projects/${p.id}`)
+  }
+
+  function handleAreaBack() {
+    setAreaSetupOpen(false)
+    setPickerOpen(true)
   }
 
   return (
@@ -153,6 +170,16 @@ export default function ProjectList() {
         title="新規現場の工事種別を選択"
         onClose={() => setPickerOpen(false)}
         onPick={handlePick}
+      />
+
+      <AreaSetupDialog
+        open={areaSetupOpen}
+        onBack={handleAreaBack}
+        onClose={() => {
+          setAreaSetupOpen(false)
+          setPendingWorkType(null)
+        }}
+        onConfirm={handleAreaConfirm}
       />
     </div>
   )

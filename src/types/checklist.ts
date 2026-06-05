@@ -19,10 +19,13 @@ export const ALL_WORK_TYPES: WorkType[] = ['install', 'removal', 'replace', 'rel
 export type FieldType =
   | 'single'   // 単一選択（チップ）
   | 'multi'    // 複数選択（チップ）
-  | 'number'   // 数値入力（箇所数、台数、高さ など）
+  | 'number'   // 数値入力（箇所数、台数 など）
+  | 'height'   // 高さ入力（単一値 or 範囲、プルダウン+±ボタン）
   | 'text'     // 短いテキスト（メモ）
   | 'memo'     // 長いテキスト（複数行）
   | 'check'    // 単一チェック（「写真とったか」など）
+  | 'carrier_matrix' // キャリア別電波測定（BOX数ぶん行が増える ○△✕）
+  | 'stopwatch' // 計測時間ストップウォッチ（始まり/終わり/計測時間/リセット）
 
 /** 1つのチェック項目 */
 export interface Field {
@@ -36,12 +39,20 @@ export interface Field {
   options?: string[]
   /** 単位や補足（例: "m", "台", "箇所"） */
   suffix?: string
+  /** height 型のプルダウン候補（省略時は既定の500単位候補） */
+  presets?: number[]
   /** 補助テキスト（小さく表示） */
   hint?: string
   /** 必須か */
   required?: boolean
   /** どの工事種別で表示するか（省略時は全種別） */
   showFor?: WorkType[]
+  /** 別フィールドの値に応じて表示する条件（一致したときのみ表示） */
+  showWhen?: { field: string; equals: string | string[] }
+  /** carrier_matrix: 行数（BOX数）を読み取るフィールドID */
+  countFrom?: string
+  /** 入力進捗のカウント対象から外す（付随メモなど）。memo型は既定で対象外 */
+  noCount?: boolean
 }
 
 /** 同じカードにまとめて表示する項目群 */
@@ -64,6 +75,12 @@ export interface Section {
   groups: FieldGroup[]
   /** 仮設時に「設置/撤去」2フェーズで入力するか */
   dualPhase?: boolean
+  /**
+   * エリア別にデータを持つか（true の場合、入力値は project.areas[].values に保存される）。
+   * 設置・機器／電源・ネットワークのように、現場内のエリアごとに別データが必要なカテゴリで使う。
+   * 省略時は現場全体で共通（project.values に保存）。
+   */
+  perArea?: boolean
 }
 
 /** 入力値（フィールドIDをキーにした任意の値） */
@@ -74,8 +91,23 @@ export type FieldValue =
   | boolean
   | null
   | undefined
+  /** carrier_matrix / stopwatch 等の構造化値（例: { "1:Docomo": "○" } / { startAt: 0 }） */
+  | Record<string, string | number | boolean | null>
 
 export type Values = Record<string, FieldValue>
+
+/**
+ * エリア1件（現場内の区画／フロア／設置単位）。
+ * perArea セクション（設置・機器／電源・ネットワーク）の入力値をエリアごとに保持する。
+ */
+export interface SurveyArea {
+  /** エリアID（安定キー） */
+  id: string
+  /** 表示名（例: "エリア1", "1F 受付"） */
+  name: string
+  /** perArea セクションの入力値 */
+  values: Values
+}
 
 /** 現場プロジェクト1件 */
 export interface Project {
@@ -91,8 +123,14 @@ export interface Project {
   inCharge: string
   /** 確認者 */
   confirmer: string
-  /** 入力値（通常項目 + dualPhase でないセクション） */
+  /** 入力値（現場全体で共通のセクション = perArea でないカテゴリ） */
   values: Values
+
+  /**
+   * エリア別の入力値（perArea セクション = 設置・機器／電源・ネットワーク）。
+   * 最低1件（"エリア1"）を持つ。
+   */
+  areas: SurveyArea[]
 
   /** 仮設時のみ使用: フェーズ別の入力値 */
   phaseValues?: {
