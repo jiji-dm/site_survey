@@ -9,6 +9,8 @@ function isFilled(type: FieldType, v: unknown): boolean {
   if (type === 'number') return typeof v === 'number' && !Number.isNaN(v)
   if (type === 'check')  return v === true
   if (type === 'multi')  return Array.isArray(v) && v.length > 0
+  // 距離測定メモはカウント対象外（呼び出し側で除外されるが念のため false）
+  if (type === 'distance_groups') return false
   if (type === 'carrier_matrix') {
     return typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length > 0
   }
@@ -61,8 +63,8 @@ export function calcSectionProgress(
     for (const a of areas) {
       for (const g of visibleGroups(s, project.workType, a.values)) {
         for (const f of visibleFields(g, project.workType, a.values)) {
-          // 付随メモなどは進捗カウントから除外（memo型は既定で対象外）
-          if (f.type === 'memo' || f.noCount) continue
+          // 付随メモ・距離測定メモなどは進捗カウントから除外（memo型は既定で対象外）
+          if (f.type === 'memo' || f.type === 'distance_groups' || f.noCount) continue
           total++
           if (isFilled(f.type, a.values[f.id])) filled++
         }

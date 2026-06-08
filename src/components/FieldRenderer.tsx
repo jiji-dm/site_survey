@@ -5,6 +5,7 @@ import ChipGroup from './ChipGroup'
 import HeightInput from './HeightInput'
 import CarrierMatrix from './CarrierMatrix'
 import StopWatch from './StopWatch'
+import DistanceGroups from './DistanceGroups'
 
 interface Props {
   field: Field
@@ -136,6 +137,16 @@ function renderControl(
           readOnly={readOnly}
           siteName={siteName}
           date={date}
+        />
+      )
+    case 'distance_groups':
+      return (
+        <DistanceGroups
+          value={value}
+          onChange={v => onChange(v)}
+          readOnly={readOnly}
+          config={field.distance}
+          suffix={field.suffix}
         />
       )
     case 'check': {

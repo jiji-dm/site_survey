@@ -26,6 +26,15 @@ export type FieldType =
   | 'check'    // 単一チェック（「写真とったか」など）
   | 'carrier_matrix' // キャリア別電波測定（BOX数ぶん行が増える ○△✕）
   | 'stopwatch' // 計測時間ストップウォッチ（始まり/終わり/計測時間/リセット）
+  | 'distance_groups' // 距離測定メモ（グループ＝LAN①・電源①等、各グループ内に複数の距離を記録し合計）
+
+/** distance_groups 型の設定 */
+export interface DistanceConfig {
+  /** 自動採番ラベルの接頭辞（例: "LAN" → "LAN①, LAN②"、"電源" → "電源①"） */
+  prefix?: string
+  /** ラベルをフリーワードで自由入力にする（図面・既設確認）。省略時は prefix による自動採番 */
+  freeLabel?: boolean
+}
 
 /** 1つのチェック項目 */
 export interface Field {
@@ -51,6 +60,8 @@ export interface Field {
   showWhen?: { field: string; equals: string | string[] }
   /** carrier_matrix: 行数（BOX数）を読み取るフィールドID */
   countFrom?: string
+  /** distance_groups 型の設定（ラベルの採番方法など） */
+  distance?: DistanceConfig
   /** 入力進捗のカウント対象から外す（付随メモなど）。memo型は既定で対象外 */
   noCount?: boolean
 }
@@ -83,6 +94,25 @@ export interface Section {
   perArea?: boolean
 }
 
+/**
+ * 距離測定メモの1グループ（LAN①・電源①・フリーワード名など）。
+ * segments には各区間の距離(m)を入れ、合計値が「グループ内距離の合計」になる。
+ * 入力途中の空欄は null として保持する。
+ */
+export interface DistanceGroup {
+  /** 安定キー */
+  id: string
+  /** 表示名（自動採番 or フリーワード） */
+  label: string
+  /** 各区間の距離（m）。空欄入力中は null */
+  segments: Array<number | null>
+}
+
+/** distance_groups 型の格納値 */
+export interface DistanceGroupsValue {
+  groups: DistanceGroup[]
+}
+
 /** 入力値（フィールドIDをキーにした任意の値） */
 export type FieldValue =
   | string
@@ -93,6 +123,8 @@ export type FieldValue =
   | undefined
   /** carrier_matrix / stopwatch 等の構造化値（例: { "1:Docomo": "○" } / { startAt: 0 }） */
   | Record<string, string | number | boolean | null>
+  /** distance_groups の構造化値 */
+  | DistanceGroupsValue
 
 export type Values = Record<string, FieldValue>
 

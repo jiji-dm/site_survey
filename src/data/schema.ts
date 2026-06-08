@@ -71,6 +71,14 @@ export const SECTIONS: Section[] = [
           { id: 'camera_height_note', label: 'カメラ高さ寸法メモ', type: 'text', hint: '補足: 高さ寸法の確認結果', noCount: true },
         ],
       },
+      {
+        id: 'lan_cable',
+        title: 'LANケーブル長さメモ',
+        description: 'LANごとに距離を記録（チェックカウント対象外）',
+        fields: [
+          { id: 'lan_cable_lengths', label: 'LANケーブル', type: 'distance_groups', suffix: 'm', distance: { prefix: 'LAN' }, noCount: true },
+        ],
+      },
     ],
   },
 
@@ -98,6 +106,14 @@ export const SECTIONS: Section[] = [
             hint: '通電する時間帯・条件・ブレーカー位置など',
             showWhen: { field: 'power_24h', equals: '無' },
           },
+        ],
+      },
+      {
+        id: 'power_cable',
+        title: '電源距離メモ',
+        description: '電源ごとに距離を記録（チェックカウント対象外）',
+        fields: [
+          { id: 'power_cable_lengths', label: '電源', type: 'distance_groups', suffix: 'm', distance: { prefix: '電源' }, noCount: true },
         ],
       },
       // ▼ ネットワーク項目グループは撤去・移設では不要
@@ -222,6 +238,14 @@ export const SECTIONS: Section[] = [
           // 既設配管の流用は撤去・移設では不要
           { id: 'pipe_reuse',     label: '既設配管の流用', type: 'single', options: ['可', '否'], showFor: NON_REMOVAL },
           { id: 'drawing_note',   label: 'メモ', type: 'memo' },
+        ],
+      },
+      {
+        id: 'drawing_measure',
+        title: '距離測定メモ',
+        description: '名称を自由に決めて距離を記録（チェックカウント対象外）',
+        fields: [
+          { id: 'drawing_measure_lengths', label: '距離測定', type: 'distance_groups', suffix: 'm', distance: { freeLabel: true, prefix: '測定' }, noCount: true },
         ],
       },
     ],
