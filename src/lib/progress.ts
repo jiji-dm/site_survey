@@ -63,8 +63,8 @@ export function calcSectionProgress(
     for (const a of areas) {
       for (const g of visibleGroups(s, project.workType, a.values)) {
         for (const f of visibleFields(g, project.workType, a.values)) {
-          // 付随メモ・距離測定メモなどは進捗カウントから除外（memo型は既定で対象外）
-          if (f.type === 'memo' || f.type === 'distance_groups' || f.noCount) continue
+          // 付随メモ・距離測定メモ・自動算出値などは進捗カウントから除外（memo型は既定で対象外）
+          if (f.type === 'memo' || f.type === 'distance_groups' || f.type === 'computed' || f.noCount) continue
           total++
           if (isFilled(f.type, a.values[f.id])) filled++
         }
@@ -92,8 +92,8 @@ export function calcSectionProgress(
   let total = 0
   for (const g of visibleGroups(s, project.workType, values)) {
     for (const f of visibleFields(g, project.workType, values)) {
-      // 付随メモなどは進捗カウントから除外（memo型は既定で対象外）
-      if (f.type === 'memo' || f.noCount) continue
+      // 付随メモ・自動算出値などは進捗カウントから除外（memo型は既定で対象外）
+      if (f.type === 'memo' || f.type === 'computed' || f.noCount) continue
       total++
       if (isFilled(f.type, values[f.id])) filled++
     }

@@ -6,7 +6,7 @@ import { saveProject } from '../lib/store'
 import { useProject } from '../hooks/useProjects'
 import { useAuth } from '../hooks/useAuth'
 import { calcTotalProgress, calcSectionProgress } from '../lib/progress'
-import { SECTIONS, visibleGroups, visibleFields, makeArea } from '../data/schema'
+import { SECTIONS, visibleGroups, visibleFields, makeArea, evalCompute } from '../data/schema'
 import type { FieldValue, Project, Section, SurveyArea, Values, WorkType } from '../types/checklist'
 import SectionNav from '../components/SectionNav'
 import FieldRenderer from '../components/FieldRenderer'
@@ -353,6 +353,7 @@ export default function ProjectEdit() {
                 <div className="space-y-4 mt-3">
                   {visibleFields(g, draft.workType, sectionValues).map(f => {
                     const cnt = f.countFrom ? Number(sectionValues[f.countFrom]) || 0 : undefined
+                    const computed = f.type === 'computed' ? evalCompute(f, sectionValues) : undefined
                     return (
                       <FieldRenderer
                         key={f.id}
@@ -361,6 +362,7 @@ export default function ProjectEdit() {
                         onChange={v => patchValue(f.id, v)}
                         readOnly={isReadOnly}
                         count={cnt}
+                        computed={computed}
                         siteName={draft.siteName}
                         date={draft.date}
                       />

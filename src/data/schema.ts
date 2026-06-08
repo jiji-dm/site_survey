@@ -63,12 +63,39 @@ export const SECTIONS: Section[] = [
       },
       {
         id: 'camera',
-        title: 'カメラ設置箇所',
+        title: '設置機器',
+        description: '機器の種類を選択。サイネージ・LiderはBOX台数と同数になります',
         fields: [
-          { id: 'camera_count',  label: 'カメラ台数', type: 'number', suffix: '台' },
-          { id: 'camera_height', label: 'カメラ高さ', type: 'height', suffix: 'mm', hint: '単一値 or 範囲で指定' },
-          { id: 'camera_photo',  label: '写真撮影（before / after 意識）', type: 'check' },
-          { id: 'camera_height_note', label: 'カメラ高さ寸法メモ', type: 'text', hint: '補足: 高さ寸法の確認結果', noCount: true },
+          { id: 'equipment_type', label: '機器の種類', type: 'single', options: ['カメラ', 'サイネージ', 'Lider'] },
+
+          // ▼ カメラ選択時：IPカメラ＋ステレオカメラ（台数は合計、上限はBOX台数×3）
+          { id: 'ip_camera_count',     label: 'IPカメラ',     type: 'number', suffix: '台', showWhen: { field: 'equipment_type', equals: 'カメラ' } },
+          { id: 'stereo_camera_count', label: 'ステレオカメラ', type: 'number', suffix: '台', showWhen: { field: 'equipment_type', equals: 'カメラ' } },
+          {
+            id: 'camera_count', label: 'カメラ台数', type: 'computed', suffix: '台',
+            hint: 'IPカメラ＋ステレオカメラ',
+            compute: { op: 'sum', from: ['ip_camera_count', 'stereo_camera_count'], maxFrom: 'box_count', maxFactor: 3 },
+            showWhen: { field: 'equipment_type', equals: 'カメラ' },
+          },
+          { id: 'camera_height', label: 'カメラ高さ', type: 'height', suffix: 'mm', hint: '単一値 or 範囲で指定', showWhen: { field: 'equipment_type', equals: 'カメラ' } },
+          { id: 'camera_photo',  label: '写真撮影（before / after 意識）', type: 'check', showWhen: { field: 'equipment_type', equals: 'カメラ' } },
+          { id: 'camera_height_note', label: 'カメラ高さ寸法メモ', type: 'text', hint: '補足: 高さ寸法の確認結果', noCount: true, showWhen: { field: 'equipment_type', equals: 'カメラ' } },
+
+          // ▼ サイネージ選択時：数量＝BOX台数
+          {
+            id: 'signage_count', label: 'サイネージ数量', type: 'computed', suffix: '台',
+            hint: 'BOX台数と同数',
+            compute: { op: 'mirror', from: ['box_count'] },
+            showWhen: { field: 'equipment_type', equals: 'サイネージ' },
+          },
+
+          // ▼ Lider選択時：数量＝BOX台数
+          {
+            id: 'lider_count', label: 'Lider数量', type: 'computed', suffix: '台',
+            hint: 'BOX台数と同数',
+            compute: { op: 'mirror', from: ['box_count'] },
+            showWhen: { field: 'equipment_type', equals: 'Lider' },
+          },
         ],
       },
       {
@@ -313,7 +340,35 @@ function matchesShowWhen(field: Field, values?: Values): boolean {
   if (!values) return false
   const cur = values[field.showWhen.field]
   const want = field.showWhen.equals
-  return Array.isArray(want) ? want.includes(cur as string) : cur === want
+  const wants = Array.isArray(want) ? want : [want]
+  // 参照先が multi（配列）の場合は、want のいずれかが選択されていれば表示
+  if (Array.isArray(cur)) return wants.some(w => (cur as string[]).includes(w))
+  return wants.includes(cur as string)
+}
+
+/** computed 型の算出結果 */
+export interface ComputedValue {
+  /** 算出値 */
+  value: number
+  /** 上限（maxFrom×maxFactor）。基準が未入力(0)なら null */
+  max: number | null
+  /** 上限超過しているか */
+  exceeded: boolean
+}
+
+/** computed フィールドの値・上限・超過判定を算出する */
+export function evalCompute(field: Field, values?: Values): ComputedValue | null {
+  const c = field.compute
+  if (!c) return null
+  const v = values ?? {}
+  const nums = c.from.map(id => Number(v[id]) || 0)
+  const value = c.op === 'mirror' ? (nums[0] ?? 0) : nums.reduce((a, b) => a + b, 0)
+  let max: number | null = null
+  if (c.maxFrom && c.maxFactor) {
+    const base = Number(v[c.maxFrom]) || 0
+    max = base > 0 ? base * c.maxFactor : null
+  }
+  return { value, max, exceeded: max != null && value > max }
 }
 
 /** ある工事種別で表示すべき field か */

@@ -27,6 +27,7 @@ export type FieldType =
   | 'carrier_matrix' // キャリア別電波測定（BOX数ぶん行が増える ○△✕）
   | 'stopwatch' // 計測時間ストップウォッチ（始まり/終わり/計測時間/リセット）
   | 'distance_groups' // 距離測定メモ（グループ＝LAN①・電源①等、各グループ内に複数の距離を記録し合計）
+  | 'computed' // 他フィールドから自動算出して表示（入力不可）。例: カメラ台数=IP+ステレオ、サイネージ数量=BOX台数
 
 /** distance_groups 型の設定 */
 export interface DistanceConfig {
@@ -34,6 +35,18 @@ export interface DistanceConfig {
   prefix?: string
   /** ラベルをフリーワードで自由入力にする（図面・既設確認）。省略時は prefix による自動採番 */
   freeLabel?: boolean
+}
+
+/** computed 型の算出設定 */
+export interface ComputeConfig {
+  /** 算出方法: sum = from の合計、mirror = from[0] の値そのまま */
+  op: 'sum' | 'mirror'
+  /** 参照するフィールドID */
+  from: string[]
+  /** 上限チェックの基準フィールドID（例: 'box_count'）。指定時 maxFactor と併用 */
+  maxFrom?: string
+  /** 上限 = maxFrom の値 × maxFactor（例: BOX台数 × 3）。超過すると警告表示 */
+  maxFactor?: number
 }
 
 /** 1つのチェック項目 */
@@ -62,6 +75,8 @@ export interface Field {
   countFrom?: string
   /** distance_groups 型の設定（ラベルの採番方法など） */
   distance?: DistanceConfig
+  /** computed 型の算出設定（合計／参照、上限チェック） */
+  compute?: ComputeConfig
   /** 入力進捗のカウント対象から外す（付随メモなど）。memo型は既定で対象外 */
   noCount?: boolean
 }
