@@ -14,7 +14,10 @@ export default function AppShell() {
   return (
     <div className="min-h-full flex flex-col">
       {!isEditing && (
-        <header className="sticky top-0 z-30 bg-surface/85 backdrop-blur border-b border-surface-border">
+        <header
+          className="sticky top-0 z-30 bg-surface/85 backdrop-blur border-b border-surface-border"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
           <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2 group">
               <span className="grid place-items-center w-8 h-8 rounded-xl

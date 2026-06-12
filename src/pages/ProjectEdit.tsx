@@ -246,7 +246,10 @@ export default function ProjectEdit() {
       {/* =================== メイン =================== */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* スマホヘッダー */}
-        <header className="lg:hidden sticky top-0 z-20 bg-surface/90 backdrop-blur border-b border-surface-border">
+        <header
+          className="lg:hidden sticky top-0 z-20 bg-surface/90 backdrop-blur border-b border-surface-border"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
           <div className="px-3 h-12 flex items-center gap-2">
             <button onClick={() => navigate('/')} className="btn-ghost -ml-1 px-2">
               <ChevronLeft size={18} />
