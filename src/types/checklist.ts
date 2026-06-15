@@ -164,12 +164,12 @@ export interface Project {
   workType: WorkType
   /** 現場名 */
   siteName: string
-  /** 調査日（YYYY-MM-DD） */
+  /** プロジェクト名（現場一覧で表示する名称） */
+  projectName: string
+  /** 作業開始日（YYYY-MM-DD）※契約 §11 の workDate に対応 */
   date: string
   /** 担当者 */
   inCharge: string
-  /** 確認者 */
-  confirmer: string
   /** 入力値（現場全体で共通のセクション = perArea でないカテゴリ） */
   values: Values
 

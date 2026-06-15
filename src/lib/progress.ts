@@ -122,7 +122,7 @@ function statFrom(filled: number, total: number): ProgressStat {
 // 互換用 (Values だけ渡される旧呼び出しがある場合のためのラッパー)
 export function calcTotalProgressFromValues(values: Values, workType: WorkType = 'install'): ProgressStat {
   return calcTotalProgress({
-    id: '', workType, siteName: '', date: '', inCharge: '', confirmer: '',
+    id: '', workType, siteName: '', projectName: '', date: '', inCharge: '',
     values, areas: [], ownerEmail: '', sharedWith: [], createdAt: 0, updatedAt: 0,
   })
 }

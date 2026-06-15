@@ -93,8 +93,11 @@ export default function ProjectList() {
                       )}
                     </div>
                     <h2 className="font-semibold text-ink truncate text-[15px]">
-                      {p.siteName || <span className="text-ink-subtle">（無題の現場）</span>}
+                      {p.projectName || p.siteName || <span className="text-ink-subtle">（無題の現場）</span>}
                     </h2>
+                    {p.projectName && p.siteName && (
+                      <div className="text-xs text-ink-subtle truncate mt-0.5">{p.siteName}</div>
+                    )}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-ink-muted">
                       <span className="inline-flex items-center gap-1">
                         <CalendarDays size={12} /> {p.date}
@@ -134,7 +137,7 @@ export default function ProjectList() {
                     <button
                       onClick={async e => {
                         e.preventDefault()
-                        if (confirm(`「${p.siteName || '無題'}」を削除しますか？`)) {
+                        if (confirm(`「${p.projectName || p.siteName || '無題'}」を削除しますか？`)) {
                           await deleteProject(p.id)
                         }
                       }}

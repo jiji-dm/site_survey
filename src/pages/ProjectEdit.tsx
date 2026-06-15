@@ -13,6 +13,7 @@ import FieldRenderer from '../components/FieldRenderer'
 import WorkTypeBadge from '../components/WorkTypeBadge'
 import WorkTypePicker from '../components/WorkTypePicker'
 import ShareDialog from '../components/ShareDialog'
+import DateCalendar from '../components/DateCalendar'
 import { useDebouncedEffect } from '../hooks/useDebounce'
 
 type Phase = 'setup' | 'removal'
@@ -294,7 +295,7 @@ export default function ProjectEdit() {
         <div className="lg:hidden p-3">
           <details className="card p-3 [&_summary]:cursor-pointer">
             <summary className="font-semibold text-sm text-ink select-none">
-              現場情報（日付・担当者など）
+              現場情報（作業開始日・担当者など）
             </summary>
             <div className="pt-3 space-y-3">
               <MetaFields draft={draft} patchMeta={patchMeta} readOnly={isReadOnly} />
@@ -434,37 +435,52 @@ function MetaFields({
         />
       </div>
       <div>
-        <label className="field-label">日付</label>
+        <label className="field-label">プロジェクト名</label>
         <input
-          type="date"
           className="input mt-1"
-          value={draft.date}
-          onChange={e => patchMeta('date', e.target.value)}
+          value={draft.projectName ?? ''}
+          onChange={e => patchMeta('projectName', e.target.value)}
+          placeholder="現場一覧で表示する名称"
           disabled={readOnly}
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label className="field-label">作業開始日</label>
+        <DateCalendar
+          value={draft.date}
+          onChange={v => patchMeta('date', v)}
+          disabled={readOnly}
+        />
+      </div>
+      <div>
+        <label className="field-label">担当者</label>
+        <input
+          className="input mt-1"
+          value={draft.inCharge}
+          onChange={e => patchMeta('inCharge', e.target.value)}
+          disabled={readOnly}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs">
         <div>
-          <label className="field-label">担当者</label>
-          <input
-            className="input mt-1"
-            value={draft.inCharge}
-            onChange={e => patchMeta('inCharge', e.target.value)}
-            disabled={readOnly}
-          />
+          <div className="field-label">作成日時</div>
+          <div className="mt-1 text-ink-muted tabular-nums">{formatDateTime(draft.createdAt)}</div>
         </div>
         <div>
-          <label className="field-label">確認者</label>
-          <input
-            className="input mt-1"
-            value={draft.confirmer}
-            onChange={e => patchMeta('confirmer', e.target.value)}
-            disabled={readOnly}
-          />
+          <div className="field-label">更新日</div>
+          <div className="mt-1 text-ink-muted tabular-nums">{formatDateTime(draft.updatedAt)}</div>
         </div>
       </div>
     </>
   )
+}
+
+/** タイムスタンプ(ms)を "YYYY/MM/DD HH:mm" で表示する */
+function formatDateTime(ts: number): string {
+  if (!ts) return '—'
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function ProgressBar({ prog }: { prog: ReturnType<typeof calcTotalProgress> | null }) {

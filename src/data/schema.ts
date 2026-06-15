@@ -192,7 +192,7 @@ export const SECTIONS: Section[] = [
         title: '高所作業',
         fields: [
           { id: 'work_height', label: '高さ', type: 'number', suffix: 'm' },
-          { id: 'ladder_type', label: '脚立・高所車', type: 'single', options: ['脚立', 'はしご', '高所車'] },
+          { id: 'ladder_type', label: '脚立・高所車', type: 'single', options: ['脚立', 'はしご', '高所作業車', 'バケット車'] },
           { id: 'ladder_onsite', label: '現場にあるか', type: 'single', options: ['有', '無'] },
         ],
       },

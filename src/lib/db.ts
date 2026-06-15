@@ -47,6 +47,17 @@ class SiteSurveyDB extends Dexie {
           p.areas = [{ id: 'area-1', name: 'エリア1', values: moved }]
         })
       })
+    // v4: projectName 追加・confirmer 廃止
+    this.version(4)
+      .stores({
+        projects: 'id, updatedAt, siteName, ownerEmail, workType',
+      })
+      .upgrade(tx => {
+        return tx.table('projects').toCollection().modify(p => {
+          if (typeof p.projectName !== 'string') p.projectName = ''
+          delete p.confirmer
+        })
+      })
   }
 }
 
@@ -75,9 +86,9 @@ export function newProject(partial: Partial<Project> = {}): Project {
     id: makeId(),
     workType,
     siteName: partial.siteName ?? '',
+    projectName: partial.projectName ?? '',
     date: partial.date ?? new Date().toISOString().slice(0, 10),
     inCharge: partial.inCharge ?? '',
-    confirmer: partial.confirmer ?? '',
     values: partial.values ?? {},
     areas,
     phaseValues: partial.phaseValues ?? (workType === 'temporary'
