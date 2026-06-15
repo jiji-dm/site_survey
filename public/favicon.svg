@@ -1,12 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- タブ用ファビコン: ヘルメット単体（文字なし）。小サイズでも視認しやすいよう大きめ -->
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7044a4"/>
-      <stop offset="1" stop-color="#3f1b5c"/>
+      <stop offset="0" stop-color="#6a3a96"/>
+      <stop offset="1" stop-color="#461d68"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <path d="M18 33 L28 43 L46 22"
-        fill="none" stroke="#ffffff" stroke-width="6"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect width="512" height="512" rx="96" fill="url(#g)"/>
+  <ellipse cx="256" cy="338" rx="194" ry="40" fill="#ffffff"/>
+  <path d="M 112 338 Q 112 116 256 116 Q 400 116 400 338 Z" fill="#ffffff"/>
+  <rect x="236" y="130" width="40" height="208" rx="20" fill="#512376"/>
+  <rect x="92" y="333" width="328" height="11" rx="5" fill="#512376" opacity="0.22"/>
 </svg>

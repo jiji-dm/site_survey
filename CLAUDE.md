@@ -26,9 +26,11 @@ React + TypeScript + Vite + Tailwind / Firebase（Firestore・Hosting）+ Dexie(
 
 ## ⚠️ 開発中の運用ルール（厳守）
 
-- **git push / firebase deploy 禁止**：本アプリは現行業務で使用中。連携作業の全工程が
-  終わりユーザーが明言するまで push・デプロイしない（ローカル commit は可）。
+- **⚠️ push＝本番自動デプロイ**：`.github/workflows/deploy.yml` が `main` への push で GitHub Pages へ
+  デプロイする。**SiteSurvey の push は本番反映**。アプリ単体で完結する編集は push してよいが、
+  **下のチェックを必ず通し、不安があればユーザーに確認してから**。
+- **アプリ間連携に依存する未完成の結合は push しない**（現行業務を壊すおそれ。ローカル commit は可）。
 - **ローカルテスト時はドメイン認証を一時無効化してよい**：`src/hooks/useAuth.ts` を
   フラグ切り替え（例 `DEV_SKIP_AUTH`）で。コード削除はしない。
-- **push/デプロイ前に必ず認証を元に戻す**（最優先チェック項目）。`firestore.rules` の
-  緩和も同様に戻すこと。
+- **push 前チェック（必須・最優先）**：認証フラグを本番値に戻す／`firestore.rules` の緩和を戻す／
+  DEV用コードが残っていない／現行機能を壊していない。`firebase deploy` は禁止のまま。

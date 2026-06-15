@@ -1,0 +1,19 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- ベース: ブランド紫 #512376 / ヘルメット（現地調査）＋VACAN（estimate・Photos と同スタイル） -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6a3a96"/>
+      <stop offset="1" stop-color="#461d68"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- 背面の V (VACAN) 透かし -->
+  <path d="M 70 56 L 256 412 L 442 56 L 366 56 L 256 268 L 146 56 Z" fill="#ffffff" opacity="0.12"/>
+  <!-- ヘルメット -->
+  <ellipse cx="256" cy="302" rx="172" ry="36" fill="#ffffff"/>
+  <path d="M 128 302 Q 128 132 256 132 Q 384 132 384 302 Z" fill="#ffffff"/>
+  <rect x="240" y="144" width="32" height="158" rx="16" fill="#512376"/>
+  <rect x="112" y="298" width="288" height="9" rx="4" fill="#512376" opacity="0.22"/>
+  <!-- 社名 -->
+  <text x="262" y="456" text-anchor="middle" fill="#ffffff" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="62" font-weight="bold" letter-spacing="12">VACAN</text>
+</svg>
