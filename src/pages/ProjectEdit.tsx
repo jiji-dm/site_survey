@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Save, Check, Share2, Download, Settings2, Eye, Users, Plus, Pencil, Trash2, MapPin } from 'lucide-react'
+import { ChevronLeft, Save, Check, Share2, Download, Settings2, Eye, Users, Plus, Pencil, Trash2, MapPin, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 import { saveProject } from '../lib/store'
 import { useProject } from '../hooks/useProjects'
@@ -14,10 +14,35 @@ import WorkTypeBadge from '../components/WorkTypeBadge'
 import WorkTypePicker from '../components/WorkTypePicker'
 import ShareDialog from '../components/ShareDialog'
 import DateCalendar from '../components/DateCalendar'
-import { useDebouncedEffect } from '../hooks/useDebounce'
 
 type Phase = 'setup' | 'removal'
 
+// ============================================================
+// 現場の編集画面
+// ------------------------------------------------------------
+// 【保存方式：手動保存】
+//   以前はオートセーブ（編集の 500ms 後に自動保存）でしたが、現在は
+//   ユーザーが明示的に「保存」ボタンを押したときだけ保存する方式です。
+//
+//   - draft … 編集中の作業コピー。フィールドを編集すると draft だけが
+//             書き換わり、ストア（Firestore / Dexie）にはまだ反映されない。
+//   - dirty … draft に未保存の変更があるかのフラグ。各編集操作（patchValue /
+//             patchMeta / エリア操作 / 工事種別変更 など）で true になり、
+//             保存が完了すると false に戻る。
+//   - handleSave() … draft をストアへ保存する。updatedAt（更新日）は
+//             この保存時にだけ更新される（編集しただけでは変わらない）。
+//
+// 【未保存のまま離脱する操作の保護】
+//   未保存（dirty=true）のまま画面を離れようとすると編集内容が失われるため、
+//   以下の2経路で確認を挟む：
+//   1. アプリ内の遷移（「現場一覧」へ戻る等）… tryLeave() が遷移をいったん
+//      止め、pendingLeave をセットして UnsavedDialog（保存して移動 / 保存せず
+//      移動 / キャンセル の3択）を表示する。
+//   2. ブラウザの閉じる・リロード … beforeunload イベントで離脱警告を出す。
+//
+//   ※ 閲覧モード（isReadOnly）のときは編集できないため dirty にならず、
+//     保存ボタンも表示されない。
+// ============================================================
 export default function ProjectEdit() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
@@ -27,9 +52,14 @@ export default function ProjectEdit() {
   // ライブ購読で初期値を読み込み
   const load = useProject(id)
 
-  // ローカル編集中の状態（オートセーブの遅延中はこちらが先行）
+  // ローカル編集中の状態（手動保存。保存するまで draft が先行する）
   const [draft, setDraft] = useState<Project | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  // 未保存の変更があるか
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  // 未保存のまま離脱しようとしたときの移動先（確認ダイアログ用）
+  const [pendingLeave, setPendingLeave] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id)
   const [activeAreaId, setActiveAreaId] = useState<string>('')
   const [activePhase, setActivePhase] = useState<Phase>('setup')
@@ -42,11 +72,48 @@ export default function ProjectEdit() {
     }
   }, [load, draft])
 
-  // オートセーブ
-  useDebouncedEffect(draft, 500, () => {
-    if (!draft) return
-    saveProject(draft).then(() => setSavedAt(Date.now()))
-  })
+  // 未保存の変更があるときだけ、ブラウザの閉じる/リロード/タブ離脱を警告する。
+  // （アプリ内の画面遷移は tryLeave() 側で確認ダイアログを出すので、ここは
+  //   ブラウザ操作による離脱専用。dirty が変わるたびに登録/解除する）
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = '' // 一部ブラウザで離脱確認を出すのに必要
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
+
+  // 手動保存：draft をストアへ保存する。
+  // ・閲覧モード / 保存中は何もしない（多重保存の防止）
+  // ・updatedAt（更新日）と updatedBy は saveProject 内で保存時刻に更新される。
+  //   その結果を画面（更新日表示など）にも反映するため setDraft(toSave) で戻す。
+  // ・保存完了で dirty を解除し、savedAt に保存時刻を記録する。
+  async function handleSave() {
+    if (!draft || isReadOnly || saving) return
+    setSaving(true)
+    try {
+      const toSave: Project = { ...draft }
+      await saveProject(toSave) // saveProject 内で updatedAt / updatedBy を更新
+      setDraft(toSave)
+      setDirty(false)
+      setSavedAt(Date.now())
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 画面遷移を試みる。
+  // 未保存なら遷移を保留して pendingLeave をセット（→ UnsavedDialog 表示）。
+  // 未保存がなければそのまま遷移する。
+  function tryLeave(to: string) {
+    if (dirty) {
+      setPendingLeave(to)
+      return
+    }
+    navigate(to)
+  }
 
   const prog = useMemo(() => (draft ? calcTotalProgress(draft) : null), [draft])
 
@@ -95,6 +162,7 @@ export default function ProjectEdit() {
 
   function patchValue(fieldId: string, v: FieldValue) {
     if (isReadOnly) return
+    setDirty(true)
     setDraft(prev => {
       if (!prev) return prev
       if (isPerArea) {
@@ -102,7 +170,7 @@ export default function ProjectEdit() {
         const areas = prev.areas.map(a =>
           a.id === aid ? { ...a, values: { ...a.values, [fieldId]: v } } : a,
         )
-        return { ...prev, areas, updatedAt: Date.now() }
+        return { ...prev, areas }
       }
       if (isDualPhase) {
         const pv = prev.phaseValues ?? { setup: {}, removal: {} }
@@ -110,50 +178,55 @@ export default function ProjectEdit() {
           ...pv,
           [effectivePhase]: { ...pv[effectivePhase], [fieldId]: v },
         }
-        return { ...prev, phaseValues: next, updatedAt: Date.now() }
+        return { ...prev, phaseValues: next }
       }
       const nextValues: Values = { ...prev.values, [fieldId]: v }
-      return { ...prev, values: nextValues, updatedAt: Date.now() }
+      return { ...prev, values: nextValues }
     })
   }
 
   // ---- エリア操作 ----
   function addArea() {
     if (isReadOnly) return
+    setDirty(true)
     setDraft(prev => {
       if (!prev) return prev
       const area = makeArea(`エリア${prev.areas.length + 1}`)
       setActiveAreaId(area.id)
-      return { ...prev, areas: [...prev.areas, area], updatedAt: Date.now() }
+      return { ...prev, areas: [...prev.areas, area] }
     })
   }
 
   function renameArea(id: string, name: string) {
     if (isReadOnly) return
+    setDirty(true)
     setDraft(prev =>
       prev
-        ? { ...prev, areas: prev.areas.map(a => (a.id === id ? { ...a, name } : a)), updatedAt: Date.now() }
+        ? { ...prev, areas: prev.areas.map(a => (a.id === id ? { ...a, name } : a)) }
         : prev,
     )
   }
 
   function deleteArea(id: string) {
     if (isReadOnly) return
+    setDirty(true)
     setDraft(prev => {
       if (!prev || prev.areas.length <= 1) return prev
       const areas = prev.areas.filter(a => a.id !== id)
       if (activeAreaId === id) setActiveAreaId(areas[0].id)
-      return { ...prev, areas, updatedAt: Date.now() }
+      return { ...prev, areas }
     })
   }
 
   function patchMeta<K extends keyof Project>(key: K, v: Project[K]) {
     if (isReadOnly) return
-    setDraft(prev => (prev ? { ...prev, [key]: v, updatedAt: Date.now() } : prev))
+    setDirty(true)
+    setDraft(prev => (prev ? { ...prev, [key]: v } : prev))
   }
 
   function toggleSameForBoth() {
     if (isReadOnly) return
+    setDirty(true)
     setDraft(prev => {
       if (!prev) return prev
       const cur = prev.phaseSameAs?.[active.id] === true
@@ -164,15 +237,16 @@ export default function ProjectEdit() {
       if (nextSame) {
         phaseValues = { ...phaseValues, removal: { ...phaseValues.setup } }
       }
-      return { ...prev, phaseSameAs, phaseValues, updatedAt: Date.now() }
+      return { ...prev, phaseSameAs, phaseValues }
     })
   }
 
   function changeWorkType(newType: WorkType) {
     if (isReadOnly) return
+    setDirty(true)
     setDraft(prev => {
       if (!prev) return prev
-      const next = { ...prev, workType: newType, updatedAt: Date.now() }
+      const next = { ...prev, workType: newType }
       // 仮設に切替時はphaseValuesを用意
       if (newType === 'temporary' && !next.phaseValues) {
         next.phaseValues = { setup: {}, removal: {} }
@@ -187,7 +261,7 @@ export default function ProjectEdit() {
       {/* =================== サイドバー (lg以上) =================== */}
       <aside className="hidden lg:flex flex-col w-[300px] xl:w-[340px] border-r border-surface-border bg-surface shrink-0">
         <div className="p-4 border-b border-surface-border">
-          <button onClick={() => navigate('/')} className="btn-ghost -ml-2">
+          <button onClick={() => tryLeave('/')} className="btn-ghost -ml-2">
             <ChevronLeft size={16} /> 現場一覧
           </button>
           <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -214,7 +288,7 @@ export default function ProjectEdit() {
           <h1 className="font-bold text-lg text-ink mt-2 truncate">
             {draft.siteName || '（無題の現場）'}
           </h1>
-          <SaveStatus savedAt={savedAt} />
+          <SaveStatus savedAt={savedAt} dirty={dirty} saving={saving} />
         </div>
 
         <div className="p-4 space-y-3 border-b border-surface-border">
@@ -235,6 +309,15 @@ export default function ProjectEdit() {
         </div>
 
         <div className="p-3 border-t border-surface-border space-y-2">
+          {!isReadOnly && (
+            <button
+              className="btn-primary w-full disabled:opacity-50"
+              onClick={handleSave}
+              disabled={!dirty || saving}
+            >
+              <Save size={14} /> {saving ? '保存中…' : dirty ? '保存' : '保存済み'}
+            </button>
+          )}
           <button className="btn-outline w-full" onClick={() => setShareOpen(true)}>
             <Share2 size={14} /> 共有
           </button>
@@ -252,7 +335,7 @@ export default function ProjectEdit() {
           style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
           <div className="px-3 h-12 flex items-center gap-2">
-            <button onClick={() => navigate('/')} className="btn-ghost -ml-1 px-2">
+            <button onClick={() => tryLeave('/')} className="btn-ghost -ml-1 px-2">
               <ChevronLeft size={18} />
             </button>
             <div className="flex-1 min-w-0">
@@ -286,7 +369,23 @@ export default function ProjectEdit() {
             >
               <Share2 size={16} />
             </button>
-            <SaveStatus savedAt={savedAt} compact />
+            {!isReadOnly ? (
+              <button
+                onClick={handleSave}
+                disabled={!dirty || saving}
+                className={clsx(
+                  'inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition',
+                  dirty
+                    ? 'bg-brand-700 text-white shadow-sm'
+                    : 'bg-surface border border-surface-border text-emerald-600',
+                )}
+              >
+                {dirty ? <Save size={13} /> : <Check size={13} />}
+                {saving ? '保存中' : dirty ? '保存' : '保存済'}
+              </button>
+            ) : (
+              <SaveStatus savedAt={savedAt} dirty={dirty} saving={saving} compact />
+            )}
           </div>
           {prog && <ThinProgress prog={prog} />}
         </header>
@@ -406,6 +505,81 @@ export default function ProjectEdit() {
         currentUserEmail={myEmail}
         onClose={() => setShareOpen(false)}
       />
+
+      {/* 未保存のまま離脱しようとしたときの確認 */}
+      {pendingLeave !== null && (
+        <UnsavedDialog
+          saving={saving}
+          onSaveAndLeave={async () => {
+            await handleSave()
+            const to = pendingLeave
+            setPendingLeave(null)
+            navigate(to)
+          }}
+          onDiscard={() => {
+            const to = pendingLeave
+            setDirty(false)
+            setPendingLeave(null)
+            navigate(to)
+          }}
+          onCancel={() => setPendingLeave(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ============================================================
+// 未保存確認ダイアログ
+// ------------------------------------------------------------
+// 未保存のまま画面を離れようとしたときに表示する3択モーダル。
+//   ・保存して移動  … onSaveAndLeave（保存してから遷移）
+//   ・保存せず移動  … onDiscard（編集を破棄して遷移）
+//   ・キャンセル    … onCancel（この画面に留まる。背景クリックも同じ）
+// saving 中は誤操作防止のため全ボタンを無効化する。
+// ============================================================
+function UnsavedDialog({
+  saving,
+  onSaveAndLeave,
+  onDiscard,
+  onCancel,
+}: {
+  saving: boolean
+  onSaveAndLeave: () => void
+  onDiscard: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-sm card p-5 shadow-pop">
+        <div className="flex items-start gap-3">
+          <div className="shrink-0 w-9 h-9 rounded-full bg-amber-50 grid place-items-center">
+            <AlertTriangle size={18} className="text-amber-600" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="font-bold text-ink">保存していない変更があります</h2>
+            <p className="text-sm text-ink-muted mt-1">
+              この画面を離れると、保存していない編集内容は失われます。
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 space-y-2">
+          <button
+            className="btn-primary w-full disabled:opacity-50"
+            onClick={onSaveAndLeave}
+            disabled={saving}
+          >
+            <Save size={14} /> {saving ? '保存中…' : '保存して移動'}
+          </button>
+          <button className="btn-outline w-full" onClick={onDiscard} disabled={saving}>
+            保存せず移動
+          </button>
+          <button className="btn-ghost w-full" onClick={onCancel} disabled={saving}>
+            キャンセル（この画面に留まる）
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -514,19 +688,28 @@ function ThinProgress({ prog }: { prog: ReturnType<typeof calcTotalProgress> }) 
   )
 }
 
-function SaveStatus({ savedAt, compact }: { savedAt: number | null; compact?: boolean }) {
-  if (!savedAt) {
-    return (
-      <span className={clsx('inline-flex items-center gap-1 text-xs text-ink-subtle', compact ? '' : 'mt-1')}>
-        <Save size={12} /> 未保存
-      </span>
-    )
+function SaveStatus({
+  savedAt,
+  dirty,
+  saving,
+  compact,
+}: {
+  savedAt: number | null
+  dirty: boolean
+  saving?: boolean
+  compact?: boolean
+}) {
+  const base = clsx('inline-flex items-center gap-1 text-xs', compact ? '' : 'mt-1')
+  if (saving) {
+    return <span className={clsx(base, 'text-ink-subtle')}><Save size={12} /> 保存中…</span>
   }
-  return (
-    <span className={clsx('inline-flex items-center gap-1 text-xs text-emerald-600', compact ? '' : 'mt-1')}>
-      <Check size={12} /> 保存済み
-    </span>
-  )
+  if (dirty) {
+    return <span className={clsx(base, 'text-amber-600')}><Save size={12} /> 未保存の変更あり</span>
+  }
+  if (!savedAt) {
+    return <span className={clsx(base, 'text-ink-subtle')}><Save size={12} /> 未保存</span>
+  }
+  return <span className={clsx(base, 'text-emerald-600')}><Check size={12} /> 保存済み</span>
 }
 
 function SectionStatBadge({
