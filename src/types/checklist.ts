@@ -156,6 +156,18 @@ export interface SurveyArea {
   values: Values
 }
 
+/** 編集履歴の1エントリ（保存ごとに1件） */
+export interface HistoryEntry {
+  /** 保存時刻(ms) */
+  at: number
+  /** 保存した人（メール。ローカル時は 'local@dev'） */
+  by: string
+  /** 作成 or 更新 */
+  action: 'create' | 'update'
+  /** 変更点の要約ラベル（更新時のみ）。例: ["担当者", "エリア1: カメラ台数"] */
+  changes?: string[]
+}
+
 /** 現場プロジェクト1件 */
 export interface Project {
   /** 文書ID */
@@ -198,4 +210,6 @@ export interface Project {
   updatedBy?: string
   /** 作成日時 */
   createdAt: number
+  /** 編集履歴（保存ごとのログ。新しいものほど末尾） */
+  history?: HistoryEntry[]
 }

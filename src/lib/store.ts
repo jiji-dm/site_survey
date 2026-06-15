@@ -30,6 +30,7 @@ import {
 } from './db'
 import type { Project } from '../types/checklist'
 import { normalizeProject } from '../data/schema'
+import { appendHistory } from './history'
 
 export { newProject }
 
@@ -125,12 +126,20 @@ export function subscribeProject(id: string, cb: (p: Project | undefined) => voi
 // 保存・削除
 // ============================================================
 export async function saveProject(p: Project): Promise<void> {
+  // 前回保存版（変更点の差分計算・履歴の引き継ぎに使う）
+  const prev = await getProject(p.id)
+
   // 所有者を補完（初回保存時）
   if (!p.ownerEmail || p.ownerEmail === 'local@dev') {
     p.ownerEmail = currentEmail() ?? p.ownerEmail
   }
   p.updatedAt = Date.now()
   p.updatedBy = currentEmail() ?? p.updatedBy
+
+  // 編集履歴を追記（変更が無ければ前回までの履歴を維持）
+  const by = currentEmail() ?? 'local@dev'
+  const nextHistory = appendHistory(prev, p, by, p.updatedAt)
+  p.history = nextHistory ?? prev?.history ?? p.history ?? []
 
   if (!useCloud() || !firestore) {
     return localSave(p)
@@ -190,5 +199,6 @@ function fromFirestore(id: string, data: Record<string, unknown>): Project {
     updatedAt: typeof d.updatedAt === 'number' ? d.updatedAt : Date.now(),
     updatedBy: d.updatedBy,
     createdAt: typeof d.createdAt === 'number' ? d.createdAt : Date.now(),
+    history: Array.isArray(d.history) ? d.history : [],
   })
 }

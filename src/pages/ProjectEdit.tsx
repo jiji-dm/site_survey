@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Save, Check, Share2, Download, Settings2, Eye, Users, Plus, Pencil, Trash2, MapPin, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, Save, Check, Share2, Download, Settings2, Eye, Users, Plus, Pencil, Trash2, MapPin, AlertTriangle, History } from 'lucide-react'
 import clsx from 'clsx'
 import { saveProject } from '../lib/store'
 import { useProject } from '../hooks/useProjects'
 import { useAuth } from '../hooks/useAuth'
 import { calcTotalProgress, calcSectionProgress } from '../lib/progress'
 import { SECTIONS, visibleGroups, visibleFields, makeArea, evalCompute } from '../data/schema'
-import type { FieldValue, Project, Section, SurveyArea, Values, WorkType } from '../types/checklist'
+import { formatDateTime, shortEmail } from '../lib/format'
+import type { FieldValue, HistoryEntry, Project, Section, SurveyArea, Values, WorkType } from '../types/checklist'
 import SectionNav from '../components/SectionNav'
 import FieldRenderer from '../components/FieldRenderer'
 import WorkTypeBadge from '../components/WorkTypeBadge'
@@ -296,6 +297,10 @@ export default function ProjectEdit() {
         </div>
 
         <div className="p-4 border-b border-surface-border">
+          <HistoryLog history={draft.history} />
+        </div>
+
+        <div className="p-4 border-b border-surface-border">
           <ProgressBar prog={prog} />
         </div>
 
@@ -400,6 +405,9 @@ export default function ProjectEdit() {
               <MetaFields draft={draft} patchMeta={patchMeta} readOnly={isReadOnly} />
             </div>
           </details>
+          <div className="mt-3">
+            <HistoryLog history={draft.history} />
+          </div>
         </div>
 
         {/* セクション本体 */}
@@ -635,26 +643,81 @@ function MetaFields({
           disabled={readOnly}
         />
       </div>
-      <div className="grid grid-cols-2 gap-3 text-xs">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs">
         <div>
           <div className="field-label">作成日時</div>
           <div className="mt-1 text-ink-muted tabular-nums">{formatDateTime(draft.createdAt)}</div>
         </div>
         <div>
-          <div className="field-label">更新日</div>
+          <div className="field-label">更新日時</div>
           <div className="mt-1 text-ink-muted tabular-nums">{formatDateTime(draft.updatedAt)}</div>
+        </div>
+        <div className="min-w-0">
+          <div className="field-label">作成者</div>
+          <div className="mt-1 text-ink-muted truncate" title={draft.ownerEmail || '—'}>
+            {shortEmail(draft.ownerEmail)}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="field-label">最終更新者</div>
+          <div className="mt-1 text-ink-muted truncate" title={draft.updatedBy || '—'}>
+            {shortEmail(draft.updatedBy)}
+          </div>
         </div>
       </div>
     </>
   )
 }
 
-/** タイムスタンプ(ms)を "YYYY/MM/DD HH:mm" で表示する */
-function formatDateTime(ts: number): string {
-  if (!ts) return '—'
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+// ============================================================
+// 編集履歴ログ
+// ------------------------------------------------------------
+// 保存ごとに記録されたエントリ（いつ・誰が・どこを変えたか）を
+// 新しい順に折りたたみ表示する。
+// ============================================================
+function HistoryLog({ history }: { history?: HistoryEntry[] }) {
+  const items = [...(history ?? [])].reverse()
+  return (
+    <details className="card p-3 [&_summary]:cursor-pointer">
+      <summary className="font-semibold text-sm text-ink select-none inline-flex items-center gap-1.5">
+        <History size={14} className="text-brand-700" />
+        編集履歴（{items.length}）
+      </summary>
+      {items.length === 0 ? (
+        <p className="pt-3 text-xs text-ink-subtle">まだ保存履歴はありません。</p>
+      ) : (
+        <ol className="pt-3 space-y-2.5 max-h-72 overflow-y-auto">
+          {items.map((h, i) => (
+            <li key={i} className="relative pl-4 text-xs">
+              <span
+                className={clsx(
+                  'absolute left-0 top-1 w-2 h-2 rounded-full',
+                  h.action === 'create' ? 'bg-brand-600' : 'bg-emerald-500',
+                )}
+              />
+              <div className="flex flex-wrap items-center gap-x-2 text-ink">
+                <span className="tabular-nums font-medium">{formatDateTime(h.at)}</span>
+                <span
+                  className={clsx(
+                    'text-[10px] font-semibold px-1.5 py-0.5 rounded-full',
+                    h.action === 'create'
+                      ? 'bg-brand-50 text-brand-700 border border-brand-200'
+                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+                  )}
+                >
+                  {h.action === 'create' ? '作成' : '更新'}
+                </span>
+                <span className="text-ink-muted truncate" title={h.by}>{shortEmail(h.by)}</span>
+              </div>
+              {h.changes && h.changes.length > 0 && (
+                <div className="mt-0.5 text-ink-muted leading-relaxed">{h.changes.join('、')}</div>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </details>
+  )
 }
 
 function ProgressBar({ prog }: { prog: ReturnType<typeof calcTotalProgress> | null }) {

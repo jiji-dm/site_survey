@@ -58,6 +58,16 @@ class SiteSurveyDB extends Dexie {
           delete p.confirmer
         })
       })
+    // v5: 編集履歴 history を追加（既存データは空配列で初期化）
+    this.version(5)
+      .stores({
+        projects: 'id, updatedAt, siteName, ownerEmail, workType',
+      })
+      .upgrade(tx => {
+        return tx.table('projects').toCollection().modify(p => {
+          if (!Array.isArray(p.history)) p.history = []
+        })
+      })
   }
 }
 

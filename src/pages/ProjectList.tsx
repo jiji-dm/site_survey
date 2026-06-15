@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, CalendarDays, User, ChevronRight, Trash2, Cloud, HardDrive, Users, Eye } from 'lucide-react'
+import { Plus, CalendarDays, User, ChevronRight, Trash2, Cloud, HardDrive, Users, Eye, Clock, PenLine, UserPlus } from 'lucide-react'
 import { newProject, saveProject, deleteProject } from '../lib/store'
 import { useProjects } from '../hooks/useProjects'
 import { useAuth } from '../hooks/useAuth'
 import { calcTotalProgress } from '../lib/progress'
+import { formatDateTime, shortEmail } from '../lib/format'
 import WorkTypeBadge from '../components/WorkTypeBadge'
 import WorkTypePicker from '../components/WorkTypePicker'
 import AreaSetupDialog from '../components/AreaSetupDialog'
@@ -128,6 +129,34 @@ export default function ProjectList() {
                       className="h-full bg-gradient-to-r from-brand-500 to-brand-700 rounded-full transition-[width]"
                       style={{ width: `${Math.max(prog.ratio * 100, 4)}%` }}
                     />
+                  </div>
+                </div>
+
+                {/* メタ情報（作成/更新の日時・作成者・更新者） */}
+                <div className="mt-3 pt-3 border-t border-surface-border grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                  <div className="min-w-0">
+                    <div className="text-ink-subtle inline-flex items-center gap-1">
+                      <Clock size={10} /> 作成日時
+                    </div>
+                    <div className="text-ink-muted tabular-nums truncate">{formatDateTime(p.createdAt)}</div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-ink-subtle inline-flex items-center gap-1">
+                      <PenLine size={10} /> 更新日時
+                    </div>
+                    <div className="text-ink-muted tabular-nums truncate">{formatDateTime(p.updatedAt)}</div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-ink-subtle inline-flex items-center gap-1">
+                      <UserPlus size={10} /> 作成者
+                    </div>
+                    <div className="text-ink-muted truncate" title={p.ownerEmail || '—'}>{shortEmail(p.ownerEmail)}</div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-ink-subtle inline-flex items-center gap-1">
+                      <User size={10} /> 最終更新者
+                    </div>
+                    <div className="text-ink-muted truncate" title={p.updatedBy || '—'}>{shortEmail(p.updatedBy)}</div>
                   </div>
                 </div>
 
